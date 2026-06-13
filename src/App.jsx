@@ -41,17 +41,14 @@ export default function App() {
 
   // --- GOOGLE TRANSLATE WITH AUTO-DETECT ---
   useEffect(() => {
-    // 1. Detect the user's browser language (e.g., 'hi-IN' becomes 'hi')
     const userLang = navigator.language || navigator.userLanguage;
     const baseLang = userLang.split('-')[0];
 
-    // 2. Force the translation cookie if they aren't using English
     if (baseLang !== 'en') {
       document.cookie = `googtrans=/en/${baseLang}; path=/;`;
       document.cookie = `googtrans=/en/${baseLang}; domain=.${window.location.hostname}; path=/;`;
     }
 
-    // 3. Inject the Google Translate Script
     if (!document.getElementById('google-translate-script')) {
       const script = document.createElement('script');
       script.id = 'google-translate-script';
@@ -63,7 +60,7 @@ export default function App() {
           pageLanguage: 'en',
           includedLanguages: 'en,es,fr,de,zh-CN,ar,ru,pt,ja,ko,hi,bn,mr,te,ta,gu,ur,kn,or,ml,pa,as,mai,sat,ks,ne,sd,doi,sa,bho,awa,brx,kha,lus,rwr,bgc,hne,tcq,trp',
           layout: window.google.translate.TranslateElement.InlineLayout.SIMPLE,
-          autoDisplay: true // Allows automatic translation based on the cookie we just set
+          autoDisplay: true 
         }, 'google_translate_element');
       };
     }
@@ -82,7 +79,7 @@ export default function App() {
     e.preventDefault();
     setAuthError('');
     try {
-      const res = await fetch('http://localhost:8000/api/login', {
+      const res = await fetch('https://clinical-portal-backend-production.up.railway.app/api/login', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ username, password })
       });
@@ -93,7 +90,7 @@ export default function App() {
         setActivePatient(data.real_name); fetchPatientData(data.real_name); setView('dashboard');
       } else { setView('provider_search'); }
     } catch (err) { 
-      if (err.message === "Failed to fetch") setAuthError("Cannot connect to server. Is your Python backend terminal running?");
+      if (err.message === "Failed to fetch") setAuthError("Cannot connect to cloud server. Check your Railway backend status.");
       else setAuthError(err.message);
     }
   };
@@ -102,7 +99,7 @@ export default function App() {
     e.preventDefault();
     setAuthError('');
     try {
-      const res = await fetch('http://localhost:8000/api/register', {
+      const res = await fetch('https://clinical-portal-backend-production.up.railway.app/api/register', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 
             username, password, real_name: regName, role: regRole,
@@ -118,14 +115,14 @@ export default function App() {
       if (!res.ok) throw new Error("Username already exists.");
       alert("Account created!"); setView('login'); setPassword('');
     } catch (err) { 
-      if (err.message === "Failed to fetch") setAuthError("Cannot connect to server. Is your Python backend terminal running?");
+      if (err.message === "Failed to fetch") setAuthError("Cannot connect to cloud server. Check your Railway backend status.");
       else setAuthError(err.message);
     }
   };
 
   const fetchPatientData = async (name) => {
     try {
-      const res = await fetch(`http://localhost:8000/api/patient/${name}`);
+      const res = await fetch(`https://clinical-portal-backend-production.up.railway.app/api/patient/${encodeURIComponent(name)}`);
       const data = await res.json();
       setPatientData(data);
       setActivePatient(name);
@@ -147,7 +144,7 @@ export default function App() {
     formData.append('force_override', force); 
 
     try {
-      const res = await fetch('http://localhost:8000/api/upload', { method: 'POST', body: formData });
+      const res = await fetch('https://clinical-portal-backend-production.up.railway.app/api/upload', { method: 'POST', body: formData });
       const data = await res.json();
       
       if (data.status === 'warning') {
@@ -158,7 +155,7 @@ export default function App() {
           return;
       }
       alert(data.message); fetchPatientData(target); 
-    } catch(err) { alert("Upload failed. Ensure backend server is running."); }
+    } catch(err) { alert("Upload failed. Ensure backend cloud server is running."); }
   };
 
   const handleFileUpload = async (e) => {
@@ -181,7 +178,7 @@ export default function App() {
   const handleSaveProfile = async () => {
     const target = user.role === 'Patient' ? user.real_name : activePatient;
     try {
-      const res = await fetch('http://localhost:8000/api/profile', {
+      const res = await fetch('https://clinical-portal-backend-production.up.railway.app/api/profile', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ target_patient: target, ...profileForm })
       });
@@ -193,7 +190,7 @@ export default function App() {
   const handleSaveVisitNote = async (date) => {
     const target = user.role === 'Patient' ? user.real_name : activePatient;
     try {
-      const res = await fetch('http://localhost:8000/api/visit/note', {
+      const res = await fetch('https://clinical-portal-backend-production.up.railway.app/api/visit/note', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ target_patient: target, visit_date: date, note: visitNotes[date] })
       });
@@ -207,7 +204,7 @@ export default function App() {
     const target = user.role === 'Patient' ? user.real_name : activePatient;
     if (!vitalsInput.height || !vitalsInput.weight) return alert("Please enter both height and weight.");
     try {
-      const res = await fetch('http://localhost:8000/api/vitals', {
+      const res = await fetch('https://clinical-portal-backend-production.up.railway.app/api/vitals', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ target_patient: target, height_cm: parseFloat(vitalsInput.height), weight_kg: parseFloat(vitalsInput.weight) })
       });
@@ -221,7 +218,7 @@ export default function App() {
     const target = user.role === 'Patient' ? user.real_name : activePatient;
     if (!prescriptionInput.medication_name) return alert("Please enter medication name.");
     try {
-      const res = await fetch('http://localhost:8000/api/prescriptions', {
+      const res = await fetch('https://clinical-portal-backend-production.up.railway.app/api/prescriptions', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ target_patient: target, ...prescriptionInput })
       });
@@ -235,7 +232,7 @@ export default function App() {
     const target = user.role === 'Patient' ? user.real_name : activePatient;
     if (!orderInput.test_name) return alert("Please enter a test name.");
     try {
-      const res = await fetch('http://localhost:8000/api/orders', {
+      const res = await fetch('https://clinical-portal-backend-production.up.railway.app/api/orders', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ target_patient: target, ...orderInput })
       });
@@ -668,7 +665,7 @@ export default function App() {
                                                                 <td className="py-3 border-b"><span className={`text-xs px-2 py-1 rounded-full font-bold ${record.Status === 'Normal' ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-700'}`}>{record.Status}</span></td>
                                                             </tr>
                                                             );
-                                                        })}
+                                                       })}
                                                    </tbody>
                                                </table>
                                            </div>

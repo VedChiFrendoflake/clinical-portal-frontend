@@ -1,0 +1,797 @@
+import React, { useState, useEffect } from 'react';
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine, Legend } from 'recharts';
+import { Activity, Upload, User, ShieldCheck, UserPlus, Search, Users, CheckCircle, ActivitySquare, Syringe, Bug, FlaskConical, AlertTriangle, ShieldAlert, Ruler, Scale, Calculator, ClipboardList, Edit3, Save, Stethoscope, FileText, Pill, FileSignature, Settings } from 'lucide-react';
+
+export default function App() {
+  const [user, setUser] = useState(null);
+  const [view, setView] = useState('login'); 
+  const [textSize, setTextSize] = useState('normal'); 
+  const [authError, setAuthError] = useState(''); 
+  
+  const [username, setUsername] = useState('');
+  const [password, setPassword] = useState('');
+  const [regName, setRegName] = useState('');
+  const [regRole, setRegRole] = useState('Patient');
+  const [regAge, setRegAge] = useState('');
+  const [regGender, setRegGender] = useState('Male');
+  const [regEmail, setRegEmail] = useState('');
+  const [regPhone, setRegPhone] = useState('');
+  const [regStreet, setRegStreet] = useState('');
+  const [regState, setRegState] = useState('');
+  const [regCountry, setRegCountry] = useState('');
+  
+  const [activePatient, setActivePatient] = useState(''); 
+  const [patientData, setPatientData] = useState({ ai_summary: '', categories: {}, vaccines: [], diseases: [], uploaded_files: [], vitals: [], personal_info: {}, profile: {}, visits: {}, prescriptions: [], ordered_tests: [] });
+  
+  const [activeCategory, setActiveCategory] = useState(''); 
+  const [selectedTestName, setSelectedTestName] = useState(''); 
+  const [searchQuery, setSearchQuery] = useState('');
+  const [dashTab, setDashTab] = useState('profile'); 
+
+  const [vitalsInput, setVitalsInput] = useState({ height: '', weight: '' });
+  const [parentsHeight, setParentsHeight] = useState({ mom: '', dad: '' });
+  const [predictedHeight, setPredictedHeight] = useState(null);
+
+  const [isEditingProfile, setIsEditingProfile] = useState(false);
+  const [profileForm, setProfileForm] = useState({ genetic_conditions: '', chronic_diseases: '', allergies: '', notes: '' });
+  
+  const [visitNotes, setVisitNotes] = useState({});
+  const [prescriptionInput, setPrescriptionInput] = useState({ medication_name: '', dosage: '', instructions: '' });
+  const [orderInput, setOrderInput] = useState({ test_name: '', reason: '' });
+
+  // --- GOOGLE TRANSLATE WITH AUTO-DETECT ---
+  useEffect(() => {
+    // 1. Detect the user's browser language (e.g., 'hi-IN' becomes 'hi')
+    const userLang = navigator.language || navigator.userLanguage;
+    const baseLang = userLang.split('-')[0];
+
+    // 2. Force the translation cookie if they aren't using English
+    if (baseLang !== 'en') {
+      document.cookie = `googtrans=/en/${baseLang}; path=/;`;
+      document.cookie = `googtrans=/en/${baseLang}; domain=.${window.location.hostname}; path=/;`;
+    }
+
+    // 3. Inject the Google Translate Script
+    if (!document.getElementById('google-translate-script')) {
+      const script = document.createElement('script');
+      script.id = 'google-translate-script';
+      script.src = '//translate.google.com/translate_a/element.js?cb=googleTranslateElementInit';
+      document.body.appendChild(script);
+
+      window.googleTranslateElementInit = () => {
+        new window.google.translate.TranslateElement({
+          pageLanguage: 'en',
+          includedLanguages: 'en,es,fr,de,zh-CN,ar,ru,pt,ja,ko,hi,bn,mr,te,ta,gu,ur,kn,or,ml,pa,as,mai,sat,ks,ne,sd,doi,sa,bho,awa,brx,kha,lus,rwr,bgc,hne,tcq,trp',
+          layout: window.google.translate.TranslateElement.InlineLayout.SIMPLE,
+          autoDisplay: true // Allows automatic translation based on the cookie we just set
+        }, 'google_translate_element');
+      };
+    }
+  }, []);
+
+  useEffect(() => {
+    if (patientData.profile) { setProfileForm(patientData.profile); }
+    if (patientData.visits) {
+      const initialNotes = {};
+      Object.values(patientData.visits).forEach(v => { initialNotes[v.date] = v.doctor_note || ''; });
+      setVisitNotes(initialNotes);
+    }
+  }, [patientData]);
+
+  const handleLogin = async (e) => {
+    e.preventDefault();
+    setAuthError('');
+    try {
+      const res = await fetch('http://localhost:8000/api/login', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username, password })
+      });
+      if (!res.ok) throw new Error("Invalid username or password.");
+      const data = await res.json();
+      setUser(data);
+      if (data.role === 'Patient') {
+        setActivePatient(data.real_name); fetchPatientData(data.real_name); setView('dashboard');
+      } else { setView('provider_search'); }
+    } catch (err) { 
+      if (err.message === "Failed to fetch") setAuthError("Cannot connect to server. Is your Python backend terminal running?");
+      else setAuthError(err.message);
+    }
+  };
+
+  const handleRegister = async (e) => {
+    e.preventDefault();
+    setAuthError('');
+    try {
+      const res = await fetch('http://localhost:8000/api/register', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+            username, password, real_name: regName, role: regRole,
+            age: regRole === 'Patient' ? parseInt(regAge) : null,
+            gender: regRole === 'Patient' ? regGender : null,
+            email: regRole === 'Patient' ? regEmail : null,
+            phone: regRole === 'Patient' ? regPhone : null,
+            street_address: regRole === 'Patient' ? regStreet : null,
+            state: regRole === 'Patient' ? regState : null,
+            country: regRole === 'Patient' ? regCountry : null,
+        })
+      });
+      if (!res.ok) throw new Error("Username already exists.");
+      alert("Account created!"); setView('login'); setPassword('');
+    } catch (err) { 
+      if (err.message === "Failed to fetch") setAuthError("Cannot connect to server. Is your Python backend terminal running?");
+      else setAuthError(err.message);
+    }
+  };
+
+  const fetchPatientData = async (name) => {
+    try {
+      const res = await fetch(`http://localhost:8000/api/patient/${name}`);
+      const data = await res.json();
+      setPatientData(data);
+      setActivePatient(name);
+      if (data.categories && Object.keys(data.categories).length > 0) {
+          const firstCat = Object.keys(data.categories)[0];
+          setActiveCategory(firstCat);
+          if (data.categories[firstCat].length > 0) setSelectedTestName(data.categories[firstCat][0].test_name);
+      }
+      setDashTab('profile'); 
+      setView('dashboard');
+    } catch (err) { console.error(err); }
+  };
+
+  const processDocumentUpload = async (file, target, force = 'false') => {
+    const formData = new FormData();
+    formData.append('file', file);
+    formData.append('target_patient', target);
+    formData.append('uploader_name', user.real_name);
+    formData.append('force_override', force); 
+
+    try {
+      const res = await fetch('http://localhost:8000/api/upload', { method: 'POST', body: formData });
+      const data = await res.json();
+      
+      if (data.status === 'warning') {
+          const proceed = window.confirm(
+            `Are you sure you would like to upload this document for ${target}?`
+          );
+          if (proceed) { processDocumentUpload(file, target, 'true'); }
+          return;
+      }
+      alert(data.message); fetchPatientData(target); 
+    } catch(err) { alert("Upload failed. Ensure backend server is running."); }
+  };
+
+  const handleFileUpload = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    
+    const target = user.role === 'Patient' ? user.real_name : activePatient;
+    if (!target) return alert("Please select a patient first.");
+
+    const proceed = window.confirm(`Are you sure you would like to upload this document for ${target}?`);
+    if (!proceed) {
+        e.target.value = null; 
+        return;
+    }
+
+    processDocumentUpload(file, target);
+    e.target.value = null; 
+  };
+
+  const handleSaveProfile = async () => {
+    const target = user.role === 'Patient' ? user.real_name : activePatient;
+    try {
+      const res = await fetch('http://localhost:8000/api/profile', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ target_patient: target, ...profileForm })
+      });
+      const data = await res.json();
+      alert(data.message); setIsEditingProfile(false); fetchPatientData(target);
+    } catch (err) { alert("Failed to update profile."); }
+  };
+
+  const handleSaveVisitNote = async (date) => {
+    const target = user.role === 'Patient' ? user.real_name : activePatient;
+    try {
+      const res = await fetch('http://localhost:8000/api/visit/note', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ target_patient: target, visit_date: date, note: visitNotes[date] })
+      });
+      const data = await res.json();
+      alert(data.message); fetchPatientData(target);
+    } catch (err) { alert("Failed to save note."); }
+  };
+
+  const handleLogVitals = async (e) => {
+    e.preventDefault();
+    const target = user.role === 'Patient' ? user.real_name : activePatient;
+    if (!vitalsInput.height || !vitalsInput.weight) return alert("Please enter both height and weight.");
+    try {
+      const res = await fetch('http://localhost:8000/api/vitals', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ target_patient: target, height_cm: parseFloat(vitalsInput.height), weight_kg: parseFloat(vitalsInput.weight) })
+      });
+      const data = await res.json();
+      alert(data.message); setVitalsInput({ height: '', weight: '' }); fetchPatientData(target);
+    } catch (err) { alert("Failed to log vitals."); }
+  };
+
+  const handleAddPrescription = async (e) => {
+    e.preventDefault();
+    const target = user.role === 'Patient' ? user.real_name : activePatient;
+    if (!prescriptionInput.medication_name) return alert("Please enter medication name.");
+    try {
+      const res = await fetch('http://localhost:8000/api/prescriptions', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ target_patient: target, ...prescriptionInput })
+      });
+      const data = await res.json();
+      alert(data.message); setPrescriptionInput({ medication_name: '', dosage: '', instructions: '' }); fetchPatientData(target);
+    } catch (err) { alert("Failed to add prescription."); }
+  };
+
+  const handleAddOrder = async (e) => {
+    e.preventDefault();
+    const target = user.role === 'Patient' ? user.real_name : activePatient;
+    if (!orderInput.test_name) return alert("Please enter a test name.");
+    try {
+      const res = await fetch('http://localhost:8000/api/orders', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ target_patient: target, ...orderInput })
+      });
+      const data = await res.json();
+      alert(data.message); setOrderInput({ test_name: '', reason: '' }); fetchPatientData(target);
+    } catch (err) { alert("Failed to place order."); }
+  };
+
+  const calculateProjectedHeight = () => {
+      const mom = parseFloat(parentsHeight.mom); const dad = parseFloat(parentsHeight.dad);
+      if (!mom || !dad) return alert("Enter both parents' heights in cm.");
+      const midParental = (mom + dad) / 2;
+      setPredictedHeight({ boy: (midParental + 6.5).toFixed(1), girl: (midParental - 6.5).toFixed(1) });
+  };
+
+  const handleCategoryClick = (category) => {
+    setActiveCategory(category);
+    if (patientData.categories[category] && patientData.categories[category].length > 0) {
+        setSelectedTestName(patientData.categories[category][0].test_name);
+    } else { setSelectedTestName(''); }
+  };
+
+  const textClass = textSize === 'large' ? 'text-lg' : 'text-base';
+
+  return (
+    <div className={`min-h-screen bg-slate-50 text-slate-800 font-sans ${textClass}`}>
+      
+      {/* FLOATING GOOGLE TRANSLATE WIDGET */}
+      <div 
+        id="google_translate_element" 
+        className="fixed bottom-6 right-6 z-[9999] shadow-2xl rounded-lg overflow-hidden border border-slate-200 bg-white p-1"
+      ></div>
+
+      {!user ? (
+        <div className="flex flex-col justify-center items-center py-12 min-h-screen">
+          <div className="bg-white p-10 rounded-2xl shadow-xl w-full max-w-lg border border-slate-100">
+            {view === 'login' ? (
+              <>
+                <div className="flex justify-center mb-6"><ShieldCheck size={56} className="text-blue-600" /></div>
+                <h2 className="text-2xl font-bold text-center text-slate-800 mb-8">Clinical Portal</h2>
+                
+                {authError && (
+                  <div className="bg-red-50 text-red-600 p-3 rounded-lg text-sm font-bold mb-6 border border-red-100 text-center">
+                    {authError}
+                  </div>
+                )}
+
+                <form onSubmit={handleLogin} className="space-y-5">
+                  <input type="text" placeholder="Username" className="w-full p-3 border rounded-lg bg-slate-50" value={username} onChange={e => setUsername(e.target.value)} />
+                  <input type="password" placeholder="Password" className="w-full p-3 border rounded-lg bg-slate-50" value={password} onChange={e => setPassword(e.target.value)} />
+                  <button type="submit" className="w-full bg-blue-600 text-white font-bold py-3 rounded-lg hover:bg-blue-700">Secure Login</button>
+                </form>
+                <p className="text-center text-sm text-slate-500 mt-6">Don't have an account? <button type="button" onClick={() => {setView('register'); setAuthError('');}} className="text-blue-600 font-bold hover:underline">Sign up</button></p>
+              </>
+            ) : (
+              <>
+                <div className="flex justify-center mb-6"><UserPlus size={56} className="text-emerald-600" /></div>
+                <h2 className="text-2xl font-bold text-center text-slate-800 mb-8">Create Account</h2>
+                
+                {authError && (
+                  <div className="bg-red-50 text-red-600 p-3 rounded-lg text-sm font-bold mb-6 border border-red-100 text-center">
+                    {authError}
+                  </div>
+                )}
+
+                <form onSubmit={handleRegister} className="space-y-4">
+                  <input type="text" placeholder="Full Legal Name" required className="w-full p-3 border rounded-lg bg-slate-50" value={regName} onChange={e => setRegName(e.target.value)} />
+                  <select className="w-full p-3 border rounded-lg bg-slate-50 text-slate-700 font-semibold" value={regRole} onChange={e => setRegRole(e.target.value)}>
+                    <option value="Patient">I am a Patient</option>
+                    <option value="Provider">Medical Provider</option>
+                  </select>
+                  
+                  {regRole === 'Patient' && (
+                    <>
+                      <div className="flex gap-2">
+                          <input type="number" placeholder="Age" required className="w-1/3 p-3 border rounded-lg bg-slate-50" value={regAge} onChange={e => setRegAge(e.target.value)} />
+                          <select className="w-2/3 p-3 border rounded-lg bg-slate-50" value={regGender} onChange={e => setRegGender(e.target.value)}>
+                              <option value="Male">Male</option>
+                              <option value="Female">Female</option>
+                              <option value="Other">Other</option>
+                          </select>
+                      </div>
+                      <div className="flex gap-2">
+                          <input type="email" placeholder="Email" required className="w-1/2 p-3 border rounded-lg bg-slate-50" value={regEmail} onChange={e => setRegEmail(e.target.value)} />
+                          <input type="tel" placeholder="Phone" required className="w-1/2 p-3 border rounded-lg bg-slate-50" value={regPhone} onChange={e => setRegPhone(e.target.value)} />
+                      </div>
+                      <input type="text" placeholder="Street Address" className="w-full p-3 border rounded-lg bg-slate-50" value={regStreet} onChange={e => setRegStreet(e.target.value)} />
+                      <div className="flex gap-2">
+                          <input type="text" placeholder="State/Province" className="w-1/2 p-3 border rounded-lg bg-slate-50" value={regState} onChange={e => setRegState(e.target.value)} />
+                          <input type="text" placeholder="Country" className="w-1/2 p-3 border rounded-lg bg-slate-50" value={regCountry} onChange={e => setRegCountry(e.target.value)} />
+                      </div>
+                    </>
+                  )}
+
+                  <input type="text" placeholder="Choose Username" required className="w-full p-3 border rounded-lg bg-slate-50 mt-4" value={username} onChange={e => setUsername(e.target.value)} />
+                  <input type="password" placeholder="Choose Password" required className="w-full p-3 border rounded-lg bg-slate-50" value={password} onChange={e => setPassword(e.target.value)} />
+                  <button type="submit" className="w-full bg-emerald-600 text-white font-bold py-3 rounded-lg hover:bg-emerald-700 mt-2">Register Now</button>
+                </form>
+                <p className="text-center text-sm text-slate-500 mt-6">Already have an account? <button type="button" onClick={() => {setView('login'); setAuthError('');}} className="text-emerald-600 font-bold hover:underline">Back to Login</button></p>
+              </>
+            )}
+          </div>
+        </div>
+      ) : (
+        <>
+          <nav className="bg-white shadow-sm border-b px-8 py-4 flex justify-between items-center fixed w-full z-10 top-0">
+            <h1 className="text-xl font-bold text-blue-600 flex items-center gap-2"><Activity /> ClinicalPortal</h1>
+            <div className="flex gap-4 items-center">
+              <button onClick={() => setTextSize(textSize === 'normal' ? 'large' : 'normal')} className="text-slate-400 hover:text-blue-600 mr-4" title="Toggle Accessibility Text Size"><Settings size={18} /></button>
+              <span className="text-sm font-medium bg-slate-100 px-3 py-1 rounded-full">{user.real_name} ({user.role})</span>
+              <button onClick={() => {setUser(null); setView('login');}} className="text-sm text-slate-500 hover:text-red-500 font-medium">Log Out</button>
+            </div>
+          </nav>
+
+          <div className="pt-28 px-8 max-w-7xl mx-auto grid grid-cols-4 gap-8 pb-12">
+            <div className="col-span-1 bg-white p-6 rounded-2xl shadow-sm border border-slate-100 h-fit sticky top-28">
+              <div className="flex items-center gap-4 mb-6">
+                <div className="h-12 w-12 bg-blue-100 text-blue-600 flex items-center justify-center rounded-full font-bold text-xl"><User /></div>
+                <div>
+                  <p className="font-bold text-slate-800">{user.real_name}</p>
+                  <p className="text-xs text-slate-500 font-mono">{user.role}</p>
+                </div>
+              </div>
+              <hr className="mb-4 border-slate-100" />
+              <ul className="space-y-2">
+                {user.role === 'Provider' && (
+                   <li><button onClick={() => setView('provider_search')} className={`w-full text-left p-3 rounded-xl transition flex items-center gap-2 ${view === 'provider_search' ? 'bg-blue-50 text-blue-700 font-bold' : 'hover:bg-slate-50 text-slate-600'}`}><Users size={18}/> Patient Roster</button></li>
+                )}
+                {activePatient && (
+                  <>
+                    <li><button onClick={() => setView('dashboard')} className={`w-full text-left p-3 rounded-xl transition ${view === 'dashboard' ? 'bg-blue-50 text-blue-700 font-bold' : 'hover:bg-slate-50 text-slate-600'}`}>Chart: {activePatient}</button></li>
+                    <li><button onClick={() => setView('upload')} className={`w-full text-left p-3 rounded-xl transition ${view === 'upload' ? 'bg-blue-50 text-blue-700 font-bold' : 'hover:bg-slate-50 text-slate-600'}`}>Upload Documents</button></li>
+                  </>
+                )}
+              </ul>
+            </div>
+
+            <div className="col-span-3 space-y-6">
+              {view === 'provider_search' && (
+                 <div className="bg-white p-10 rounded-2xl shadow-sm border border-slate-100">
+                   <h3 className="text-xl font-bold mb-6 flex items-center gap-2"><Search className="text-blue-600"/> Find Patient Chart</h3>
+                   <div className="flex gap-4">
+                     <input type="text" placeholder="Enter patient name" className="flex-1 p-4 border border-slate-200 rounded-xl bg-slate-50" value={searchQuery} onChange={e => setSearchQuery(e.target.value)} />
+                     <button onClick={() => fetchPatientData(searchQuery)} className="bg-blue-600 text-white px-8 font-bold rounded-xl hover:bg-blue-700 transition">Access Chart</button>
+                   </div>
+                 </div>
+              )}
+
+              {view === 'dashboard' && activePatient && (
+                <>
+                  <div className="bg-white p-2 rounded-xl shadow-sm border border-slate-100 flex gap-2 overflow-x-auto">
+                     <button onClick={() => setDashTab('profile')} className={`flex-1 min-w-[120px] py-3 rounded-lg font-bold flex items-center justify-center gap-2 transition ${dashTab === 'profile' ? 'bg-emerald-50 text-emerald-700' : 'text-slate-500 hover:bg-slate-50'}`}><ClipboardList size={18}/> Profile</button>
+                     <button onClick={() => setDashTab('visits')} className={`flex-1 min-w-[120px] py-3 rounded-lg font-bold flex items-center justify-center gap-2 transition ${dashTab === 'visits' ? 'bg-purple-50 text-purple-700' : 'text-slate-500 hover:bg-slate-50'}`}><Stethoscope size={18}/> Encounters</button>
+                     <button onClick={() => setDashTab('prescriptions')} className={`flex-1 min-w-[120px] py-3 rounded-lg font-bold flex items-center justify-center gap-2 transition ${dashTab === 'prescriptions' ? 'bg-cyan-50 text-cyan-700' : 'text-slate-500 hover:bg-slate-50'}`}><Pill size={18}/> Rx & Meds</button>
+                     <button onClick={() => setDashTab('orders')} className={`flex-1 min-w-[120px] py-3 rounded-lg font-bold flex items-center justify-center gap-2 transition ${dashTab === 'orders' ? 'bg-pink-50 text-pink-700' : 'text-slate-500 hover:bg-slate-50'}`}><FileSignature size={18}/> Orders</button>
+                     <button onClick={() => setDashTab('labs')} className={`flex-1 min-w-[120px] py-3 rounded-lg font-bold flex items-center justify-center gap-2 transition ${dashTab === 'labs' ? 'bg-blue-50 text-blue-700' : 'text-slate-500 hover:bg-slate-50'}`}><FlaskConical size={18}/> Labs</button>
+                     <button onClick={() => setDashTab('growth')} className={`flex-1 min-w-[120px] py-3 rounded-lg font-bold flex items-center justify-center gap-2 transition ${dashTab === 'growth' ? 'bg-orange-50 text-orange-700' : 'text-slate-500 hover:bg-slate-50'}`}><Ruler size={18}/> Vitals</button>
+                     <button onClick={() => setDashTab('vaccines')} className={`flex-1 min-w-[120px] py-3 rounded-lg font-bold flex items-center justify-center gap-2 transition ${dashTab === 'vaccines' ? 'bg-indigo-50 text-indigo-700' : 'text-slate-500 hover:bg-slate-50'}`}><Syringe size={18}/> Vaccines</button>
+                     <button onClick={() => setDashTab('diseases')} className={`flex-1 min-w-[120px] py-3 rounded-lg font-bold flex items-center justify-center gap-2 transition ${dashTab === 'diseases' ? 'bg-rose-50 text-rose-700' : 'text-slate-500 hover:bg-slate-50'}`}><Bug size={18}/> Screenings</button>
+                  </div>
+
+                  {dashTab === 'profile' && (
+                     <div className="grid grid-cols-3 gap-6">
+                        <div className="col-span-1 bg-white p-6 rounded-2xl shadow-sm border border-slate-100 h-fit">
+                            <h3 className="font-bold text-slate-800 text-lg mb-4 border-b pb-2">Personal Info</h3>
+                            <div className="space-y-4 text-sm">
+                                <div><p className="text-slate-400 font-bold uppercase text-xs">Full Name</p><p className="font-semibold text-slate-800">{activePatient}</p></div>
+                                <div><p className="text-slate-400 font-bold uppercase text-xs">Age</p><p className="font-semibold text-slate-800">{patientData.personal_info?.age || 'N/A'}</p></div>
+                                <div><p className="text-slate-400 font-bold uppercase text-xs">Biological Sex</p><p className="font-semibold text-slate-800">{patientData.personal_info?.gender || 'N/A'}</p></div>
+                                <div><p className="text-slate-400 font-bold uppercase text-xs">Email</p><p className="font-semibold text-slate-800">{patientData.personal_info?.email || 'N/A'}</p></div>
+                                <div><p className="text-slate-400 font-bold uppercase text-xs">Phone</p><p className="font-semibold text-slate-800">{patientData.personal_info?.phone || 'N/A'}</p></div>
+                                <div><p className="text-slate-400 font-bold uppercase text-xs">Address</p><p className="font-semibold text-slate-800">{patientData.personal_info?.address || 'N/A'}</p></div>
+                            </div>
+                        </div>
+
+                        <div className="col-span-2 bg-white p-6 rounded-2xl shadow-sm border border-slate-100">
+                            <div className="flex justify-between items-center mb-4 border-b pb-2">
+                                <h3 className="font-bold text-slate-800 text-lg">Clinical Overview</h3>
+                                {user.role === 'Provider' && !isEditingProfile && (
+                                    <button onClick={() => setIsEditingProfile(true)} className="flex items-center gap-1 text-sm text-blue-600 font-bold hover:underline"><Edit3 size={16}/> Edit Profile</button>
+                                )}
+                                {isEditingProfile && (
+                                    <button onClick={handleSaveProfile} className="flex items-center gap-1 text-sm bg-emerald-600 text-white px-4 py-1.5 rounded-lg font-bold hover:bg-emerald-700 transition"><Save size={16}/> Save Changes</button>
+                                )}
+                            </div>
+
+                            {isEditingProfile ? (
+                                <div className="space-y-4">
+                                    <div><label className="text-sm font-bold text-slate-700">Dangerous Allergies</label><input type="text" value={profileForm.allergies} onChange={e => setProfileForm({...profileForm, allergies: e.target.value})} placeholder="e.g. Penicillin" className="w-full p-2 border rounded-lg bg-slate-50 mt-1" /></div>
+                                    <div><label className="text-sm font-bold text-slate-700">Chronic Diseases</label><input type="text" value={profileForm.chronic_diseases} onChange={e => setProfileForm({...profileForm, chronic_diseases: e.target.value})} placeholder="e.g. Diabetes" className="w-full p-2 border rounded-lg bg-slate-50 mt-1" /></div>
+                                    <div><label className="text-sm font-bold text-slate-700">Genetic Conditions</label><input type="text" value={profileForm.genetic_conditions} onChange={e => setProfileForm({...profileForm, genetic_conditions: e.target.value})} placeholder="e.g. BRCA1 Positive" className="w-full p-2 border rounded-lg bg-slate-50 mt-1" /></div>
+                                    <div><label className="text-sm font-bold text-slate-700">Provider Notes</label><textarea value={profileForm.notes} onChange={e => setProfileForm({...profileForm, notes: e.target.value})} className="w-full p-2 border rounded-lg bg-slate-50 mt-1 h-24" placeholder="Enter clinical notes..."></textarea></div>
+                                </div>
+                            ) : (
+                                <div className="space-y-6">
+                                    <div>
+                                        <h4 className="text-sm font-bold text-red-500 uppercase flex items-center gap-1 mb-2"><AlertTriangle size={16}/> Allergies</h4>
+                                        <div className="flex flex-wrap gap-2">
+                                            {patientData.profile?.allergies ? patientData.profile.allergies.split(',').map((item, i) => (
+                                                <span key={i} className="bg-red-50 text-red-700 border border-red-100 px-3 py-1 rounded-md font-semibold text-sm">{item.trim()}</span>
+                                            )) : <span className="text-slate-400 text-sm italic">No allergies recorded.</span>}
+                                        </div>
+                                    </div>
+                                    <div>
+                                        <h4 className="text-sm font-bold text-indigo-500 uppercase mb-2">Chronic Diseases</h4>
+                                        <div className="flex flex-wrap gap-2">
+                                            {patientData.profile?.chronic_diseases ? patientData.profile.chronic_diseases.split(',').map((item, i) => (
+                                                <span key={i} className="bg-indigo-50 text-indigo-700 border border-indigo-100 px-3 py-1 rounded-md font-semibold text-sm">{item.trim()}</span>
+                                            )) : <span className="text-slate-400 text-sm italic">No chronic diseases recorded.</span>}
+                                        </div>
+                                    </div>
+                                    <div>
+                                        <h4 className="text-sm font-bold text-blue-500 uppercase mb-2">Genetic Conditions</h4>
+                                        <div className="flex flex-wrap gap-2">
+                                            {patientData.profile?.genetic_conditions ? patientData.profile.genetic_conditions.split(',').map((item, i) => (
+                                                <span key={i} className="bg-blue-50 text-blue-700 border border-blue-100 px-3 py-1 rounded-md font-semibold text-sm">{item.trim()}</span>
+                                            )) : <span className="text-slate-400 text-sm italic">No genetic conditions recorded.</span>}
+                                        </div>
+                                    </div>
+                                    <div>
+                                        <h4 className="text-sm font-bold text-slate-500 uppercase mb-2">Provider Notes</h4>
+                                        <p className="text-sm text-slate-700 bg-slate-50 p-4 rounded-lg border whitespace-pre-wrap">{patientData.profile?.notes || "No notes recorded."}</p>
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+                     </div>
+                  )}
+
+                  {dashTab === 'visits' && (
+                      <div className="space-y-6">
+                          <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100">
+                              <h3 className="text-xl font-bold mb-2 text-slate-800 flex items-center gap-2"><Stethoscope className="text-purple-600"/> Clinical Encounters</h3>
+                              <p className="text-slate-500 text-sm">A timeline of visits and processed documents.</p>
+                          </div>
+                          
+                          {patientData.visits && Object.keys(patientData.visits).length > 0 ? (
+                              Object.values(patientData.visits).sort((a,b) => new Date(b.date) - new Date(a.date)).map((visit, idx) => (
+                                  <div key={idx} className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100">
+                                      <div className="flex justify-between items-center border-b pb-4 mb-4">
+                                          <div>
+                                              <h4 className="font-bold text-lg text-slate-800">Encounter: {visit.date}</h4>
+                                              <p className="text-sm text-slate-500">Provider / Uploader: {visit.provider}</p>
+                                          </div>
+                                      </div>
+                                      
+                                      <div className="grid grid-cols-2 gap-6">
+                                          <div className="space-y-4">
+                                              <div className="bg-emerald-50 p-4 rounded-xl border border-emerald-100">
+                                                  <p className="text-xs font-bold text-emerald-700 uppercase mb-1">AI Visit Summary</p>
+                                                  <p className="text-sm text-emerald-900 whitespace-pre-wrap leading-relaxed">
+                                                      {visit.ai_summary || "No specific metrics detected in documents."}
+                                                  </p>
+                                              </div>
+                                              <div>
+                                                  <p className="text-xs font-bold text-slate-500 uppercase mb-2">Attached Documents</p>
+                                                  <ul className="space-y-2">
+                                                      {visit.documents.map((doc, i) => (
+                                                          <li key={i} className="flex items-center gap-2 text-sm text-slate-700 bg-slate-50 p-2 rounded border"><FileText size={14} className="text-slate-400"/> {doc}</li>
+                                                      ))}
+                                                  </ul>
+                                              </div>
+                                          </div>
+                                          
+                                          <div className="flex flex-col h-full">
+                                              <p className="text-xs font-bold text-slate-500 uppercase mb-2">Physician Encounter Note</p>
+                                              <textarea 
+                                                  value={visitNotes[visit.date] || ''} 
+                                                  onChange={(e) => setVisitNotes({...visitNotes, [visit.date]: e.target.value})}
+                                                  placeholder="Add clinical observations, treatment plans, or instructions here..."
+                                                  className="w-full flex-grow p-3 border rounded-lg bg-slate-50 text-sm focus:ring-2 focus:ring-purple-500 outline-none resize-none mb-3"
+                                                  readOnly={user.role === 'Patient'}
+                                              ></textarea>
+                                              {user.role === 'Provider' && (
+                                                  <button onClick={() => handleSaveVisitNote(visit.date)} className="w-full bg-purple-600 text-white font-bold py-2 rounded-lg hover:bg-purple-700 transition flex items-center justify-center gap-2"><Save size={16}/> Save Visit Note</button>
+                                              )}
+                                          </div>
+                                      </div>
+                                  </div>
+                              ))
+                          ) : (
+                              <div className="bg-white p-12 text-center rounded-2xl border border-slate-100"><p className="text-slate-500">No recorded encounters.</p></div>
+                          )}
+                      </div>
+                  )}
+
+                  {dashTab === 'prescriptions' && (
+                     <div className="grid grid-cols-3 gap-6">
+                        <div className="col-span-2 bg-white rounded-2xl shadow-sm border border-slate-100 h-fit">
+                            <div className="bg-slate-50 px-6 py-4 border-b flex justify-between items-center">
+                                <h3 className="font-bold text-slate-800 text-lg flex items-center gap-2"><Pill className="text-cyan-600"/> Active Medications</h3>
+                            </div>
+                            <div className="p-6">
+                                {patientData.prescriptions && patientData.prescriptions.length > 0 ? (
+                                    <ul className="space-y-4">
+                                        {patientData.prescriptions.map((rx, idx) => (
+                                            <li key={idx} className="p-4 border rounded-xl bg-cyan-50 border-cyan-100">
+                                                <div className="flex justify-between items-start mb-2">
+                                                    <h4 className="font-bold text-cyan-900 text-lg">{rx.medication}</h4>
+                                                    <span className="text-xs font-bold text-cyan-600 bg-white px-2 py-1 rounded border">Ordered: {rx.date}</span>
+                                                </div>
+                                                <p className="text-sm font-semibold text-cyan-800 mb-1">Dosage: {rx.dosage}</p>
+                                                <p className="text-sm text-cyan-700 italic">"{rx.instructions}"</p>
+                                            </li>
+                                        ))}
+                                    </ul>
+                                ) : (<p className="text-slate-500 text-center py-10">No active prescriptions.</p>)}
+                            </div>
+                        </div>
+                        {user.role === 'Provider' && (
+                            <div className="col-span-1">
+                                <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100">
+                                    <h3 className="font-bold text-slate-800 mb-4 flex items-center gap-2"><Edit3 className="text-cyan-600" size={20}/> New Prescription</h3>
+                                    <form onSubmit={handleAddPrescription} className="space-y-4">
+                                        <div><label className="text-xs font-bold text-slate-500 uppercase">Medication Name</label><input type="text" required value={prescriptionInput.medication_name} onChange={e => setPrescriptionInput({...prescriptionInput, medication_name: e.target.value})} className="w-full p-2 border rounded bg-slate-50" /></div>
+                                        <div><label className="text-xs font-bold text-slate-500 uppercase">Dosage</label><input type="text" required value={prescriptionInput.dosage} onChange={e => setPrescriptionInput({...prescriptionInput, dosage: e.target.value})} className="w-full p-2 border rounded bg-slate-50" placeholder="e.g. 50mg" /></div>
+                                        <div><label className="text-xs font-bold text-slate-500 uppercase">Instructions (Sig)</label><textarea required value={prescriptionInput.instructions} onChange={e => setPrescriptionInput({...prescriptionInput, instructions: e.target.value})} className="w-full p-2 border rounded bg-slate-50 h-24" placeholder="e.g. Take 1 tablet by mouth daily"></textarea></div>
+                                        <button type="submit" className="w-full bg-cyan-600 text-white font-bold py-2 rounded">Prescribe</button>
+                                    </form>
+                                </div>
+                            </div>
+                        )}
+                     </div>
+                  )}
+
+                  {dashTab === 'orders' && (
+                     <div className="grid grid-cols-3 gap-6">
+                        <div className="col-span-2 bg-white rounded-2xl shadow-sm border border-slate-100 h-fit">
+                            <div className="bg-slate-50 px-6 py-4 border-b flex justify-between items-center">
+                                <h3 className="font-bold text-slate-800 text-lg flex items-center gap-2"><FileSignature className="text-pink-600"/> Lab & Imaging Orders</h3>
+                            </div>
+                            <div className="p-6">
+                                {patientData.ordered_tests && patientData.ordered_tests.length > 0 ? (
+                                    <ul className="space-y-4">
+                                        {patientData.ordered_tests.map((order, idx) => (
+                                            <li key={idx} className={`p-4 border rounded-xl ${order.status === 'Pending' ? 'bg-pink-50 border-pink-100' : 'bg-slate-50 border-slate-200'}`}>
+                                                <div className="flex justify-between items-start mb-2">
+                                                    <h4 className={`font-bold text-lg ${order.status === 'Pending' ? 'text-pink-900' : 'text-slate-700 line-through'}`}>{order.test_name}</h4>
+                                                    <span className={`text-xs font-bold px-2 py-1 rounded border ${order.status === 'Pending' ? 'text-pink-600 bg-white border-pink-200' : 'text-emerald-600 bg-emerald-50 border-emerald-200'}`}>{order.status}</span>
+                                                </div>
+                                                <p className={`text-sm italic ${order.status === 'Pending' ? 'text-pink-700' : 'text-slate-500'}`}>Reason: {order.reason}</p>
+                                                <p className="text-xs text-slate-400 mt-2">Ordered: {order.date}</p>
+                                            </li>
+                                        ))}
+                                    </ul>
+                                ) : (<p className="text-slate-500 text-center py-10">No pending orders.</p>)}
+                            </div>
+                        </div>
+                        {user.role === 'Provider' && (
+                            <div className="col-span-1">
+                                <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100">
+                                    <h3 className="font-bold text-slate-800 mb-4 flex items-center gap-2"><Edit3 className="text-pink-600" size={20}/> New Order</h3>
+                                    <form onSubmit={handleAddOrder} className="space-y-4">
+                                        <div><label className="text-xs font-bold text-slate-500 uppercase">Test Name</label><input type="text" required value={orderInput.test_name} onChange={e => setOrderInput({...orderInput, test_name: e.target.value})} className="w-full p-2 border rounded bg-slate-50" placeholder="e.g. Hemoglobin A1c" /></div>
+                                        <div><label className="text-xs font-bold text-slate-500 uppercase">Clinical Reason (Dx)</label><textarea required value={orderInput.reason} onChange={e => setOrderInput({...orderInput, reason: e.target.value})} className="w-full p-2 border rounded bg-slate-50 h-24" placeholder="e.g. Routine screening for diabetes"></textarea></div>
+                                        <button type="submit" className="w-full bg-pink-600 text-white font-bold py-2 rounded">Sign Order</button>
+                                    </form>
+                                </div>
+                            </div>
+                        )}
+                     </div>
+                  )}
+
+                  {dashTab === 'labs' && (
+                     <>
+                       {Object.keys(patientData.categories || {}).length > 0 ? (
+                         <>
+                           <div className="flex gap-2 border-b border-slate-200 pb-2 relative z-10">
+                               {Object.keys(patientData.categories || {}).map(category => (
+                                   <button 
+                                     key={category} 
+                                     type="button"
+                                     onClick={(e) => { e.preventDefault(); handleCategoryClick(category); }} 
+                                     className={`cursor-pointer px-6 py-2 rounded-t-lg font-bold transition-colors ${activeCategory === category ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}
+                                   >
+                                     {category}
+                                   </button>
+                               ))}
+                           </div>
+                           {patientData.categories[activeCategory]?.length > 0 && (
+                               <div className="bg-white p-4 rounded-xl border border-slate-200 flex items-center gap-4 shadow-sm mt-4">
+                                   <ActivitySquare className="text-blue-600" size={24} />
+                                   <label className="font-bold text-slate-700">Select Lab Test:</label>
+                                   <select value={selectedTestName} onChange={(e) => setSelectedTestName(e.target.value)} className="p-3 border rounded-lg bg-slate-50 font-semibold min-w-[250px] cursor-pointer">
+                                       {patientData.categories[activeCategory].map(test => (<option key={test.test_name} value={test.test_name}>{test.test_name}</option>))}
+                                   </select>
+                               </div>
+                           )}
+                           {(() => {
+                               const activeTest = patientData.categories[activeCategory]?.find(t => t.test_name === selectedTestName);
+                               if (!activeTest) return null;
+
+                               const sortedHistory = [...activeTest.history].sort((a, b) => new Date(a.Date) - new Date(b.Date));
+
+                               return (
+                                   <div className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden mt-6">
+                                       <div className="bg-slate-50 px-6 py-4 border-b flex justify-between items-center">
+                                           <h3 className="font-bold text-slate-800 text-lg">{activeTest.test_name} Trend Analysis</h3>
+                                           <span className="text-sm bg-white border px-4 py-1.5 rounded-full font-medium">Range: {activeTest.normal_min} - {activeTest.normal_max} {activeTest.unit}</span>
+                                       </div>
+                                       <div className="grid grid-cols-2">
+                                           <div className="p-6 border-r h-80">
+                                               <ResponsiveContainer width="100%" height="100%">
+                                                 <LineChart data={sortedHistory}>
+                                                   <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                                                   <XAxis dataKey="Date" tick={{fontSize: 12}} axisLine={false} tickLine={false} />
+                                                   <YAxis domain={[0, 'auto']} tick={{fontSize: 12}} axisLine={false} tickLine={false} />
+                                                   <Tooltip contentStyle={{borderRadius: '8px'}} />
+                                                   {activeTest.normal_min !== 0 && <ReferenceLine y={activeTest.normal_min} stroke="#10B981" strokeDasharray="3 3" />}
+                                                   {activeTest.normal_max !== 0 && <ReferenceLine y={activeTest.normal_max} stroke="#10B981" strokeDasharray="3 3" />}
+                                                   <Line type="monotone" dataKey="Value" stroke="#2563EB" strokeWidth={4} />
+                                                 </LineChart>
+                                               </ResponsiveContainer>
+                                           </div>
+                                           <div className="p-6 overflow-y-auto h-80">
+                                               <table className="w-full text-left">
+                                                   <thead><tr><th className="pb-3 text-xs uppercase text-slate-400 border-b">Date</th><th className="pb-3 text-xs uppercase text-slate-400 border-b">Value & Trend</th><th className="pb-3 text-xs uppercase text-slate-400 border-b">Status</th></tr></thead>
+                                                   <tbody>
+                                                       {sortedHistory.map((record, i) => {
+                                                            let deltaHTML = null;
+                                                            if (i > 0) {
+                                                                const diff = record.Value - sortedHistory[i-1].Value;
+                                                                if (diff > 0) deltaHTML = <span className="text-xs text-red-500 font-bold ml-2">(↑ {diff.toFixed(2)})</span>;
+                                                                else if (diff < 0) deltaHTML = <span className="text-xs text-emerald-500 font-bold ml-2">(↓ {Math.abs(diff).toFixed(2)})</span>;
+                                                            }
+                                                            return (
+                                                            <tr key={i} className="hover:bg-slate-50">
+                                                                <td className="py-3 text-sm font-medium border-b">{record.Date}</td>
+                                                                <td className="py-3 text-sm font-bold border-b">{record.Value} {activeTest.unit} {deltaHTML}</td>
+                                                                <td className="py-3 border-b"><span className={`text-xs px-2 py-1 rounded-full font-bold ${record.Status === 'Normal' ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-700'}`}>{record.Status}</span></td>
+                                                            </tr>
+                                                            );
+                                                        })}
+                                                   </tbody>
+                                               </table>
+                                           </div>
+                                       </div>
+                                   </div>
+                               );
+                           })()}
+                         </>
+                       ) : (<div className="bg-white p-12 text-center rounded-2xl border"><p className="text-slate-500">No lab data available.</p></div>)}
+                     </>
+                  )}
+
+                  {dashTab === 'growth' && (
+                     <div className="grid grid-cols-3 gap-6">
+                        <div className="col-span-2 bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden flex flex-col h-[550px]">
+                            <div className="bg-slate-50 px-6 py-4 border-b border-slate-100 flex justify-between items-center">
+                                <h3 className="font-bold text-slate-800 text-lg flex items-center gap-2"><ActivitySquare className="text-orange-600"/> Height & Weight Trajectory</h3>
+                            </div>
+                            <div className="p-6 flex-grow">
+                                {patientData.vitals && patientData.vitals.length > 0 ? (
+                                    <ResponsiveContainer width="100%" height="100%">
+                                      <LineChart data={patientData.vitals}>
+                                        <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                                        <XAxis dataKey="Date" tick={{fontSize: 12}} />
+                                        <YAxis yAxisId="left" orientation="left" label={{ value: 'Height (cm)', angle: -90, position: 'insideLeft', style: {textAnchor: 'middle'} }} />
+                                        <YAxis yAxisId="right" orientation="right" label={{ value: 'Weight (kg)', angle: 90, position: 'insideRight', style: {textAnchor: 'middle'} }} />
+                                        <Tooltip contentStyle={{borderRadius: '8px'}} />
+                                        <Legend verticalAlign="top" height={36}/>
+                                        <Line yAxisId="left" type="monotone" dataKey="Height" stroke="#EA580C" strokeWidth={4} name="Height (cm)" />
+                                        <Line yAxisId="right" type="monotone" dataKey="Weight" stroke="#0284C7" strokeWidth={4} name="Weight (kg)" />
+                                      </LineChart>
+                                    </ResponsiveContainer>
+                                ) : (<div className="h-full flex items-center justify-center"><p className="text-slate-400">No vitals logged yet.</p></div>)}
+                            </div>
+                        </div>
+
+                        <div className="col-span-1 space-y-6">
+                            <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100">
+                                <h3 className="font-bold text-slate-800 mb-4 flex items-center gap-2"><Scale className="text-orange-500" size={20}/> Log New Vitals</h3>
+                                <form onSubmit={handleLogVitals} className="space-y-4">
+                                    <div><label className="text-xs font-bold text-slate-500 uppercase">Height (cm)</label><input type="number" step="0.1" value={vitalsInput.height} onChange={(e) => setVitalsInput({...vitalsInput, height: e.target.value})} className="w-full p-2 border rounded bg-slate-50" /></div>
+                                    <div><label className="text-xs font-bold text-slate-500 uppercase">Weight (kg)</label><input type="number" step="0.1" value={vitalsInput.weight} onChange={(e) => setVitalsInput({...vitalsInput, weight: e.target.value})} className="w-full p-2 border rounded bg-slate-50" /></div>
+                                    <button type="submit" className="w-full bg-orange-500 text-white font-bold py-2 rounded">Save to Chart</button>
+                                </form>
+                                {patientData.vitals && patientData.vitals.length > 0 && (
+                                    <div className="mt-4 p-3 bg-orange-50 rounded-lg text-center border border-orange-100">
+                                        <p className="text-sm text-orange-800 font-bold mb-1">Current BMI</p><p className="text-2xl text-orange-600 font-black">{patientData.vitals[patientData.vitals.length-1].BMI}</p>
+                                    </div>
+                                )}
+                            </div>
+                            <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100">
+                                <h3 className="font-bold text-slate-800 mb-4 flex items-center gap-2"><Calculator className="text-blue-500" size={20}/> Target Height</h3>
+                                <div className="space-y-3">
+                                    <input type="number" value={parentsHeight.mom} onChange={(e) => setParentsHeight({...parentsHeight, mom: e.target.value})} className="w-full p-2 border rounded bg-slate-50 text-sm" placeholder="Mother's Height (cm)" />
+                                    <input type="number" value={parentsHeight.dad} onChange={(e) => setParentsHeight({...parentsHeight, dad: e.target.value})} className="w-full p-2 border rounded bg-slate-50 text-sm" placeholder="Father's Height (cm)" />
+                                    <button onClick={calculateProjectedHeight} className="w-full bg-blue-50 text-blue-700 border border-blue-200 font-bold py-2 rounded">Calculate</button>
+                                </div>
+                                
+                                {predictedHeight && (
+                                    <div className="mt-4 space-y-2">
+                                        <div className="flex justify-between p-2 bg-blue-50 rounded text-sm font-bold text-blue-800"><span>If Male:</span> <span>{predictedHeight.boy} cm</span></div>
+                                        <div className="flex justify-between p-2 bg-pink-50 rounded text-sm font-bold text-pink-800"><span>If Female:</span> <span>{predictedHeight.girl} cm</span></div>
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+                     </div>
+                  )}
+
+                  {dashTab === 'vaccines' && (
+                     <div className="bg-white p-8 rounded-2xl border">
+                        <h3 className="text-xl font-bold mb-6 flex items-center gap-2"><Syringe className="text-indigo-600"/> Immunization Record</h3>
+                        {patientData.vaccines && patientData.vaccines.length > 0 ? (
+                            <div className="grid grid-cols-2 gap-4">
+                                {patientData.vaccines.map((vac, idx) => (
+                                    <div key={idx} className="p-5 border rounded-xl bg-slate-50 flex flex-col justify-between">
+                                        <div className="flex justify-between items-start mb-4">
+                                            <h4 className="font-bold text-lg">{vac.name}</h4>
+                                            <span className={`text-xs font-bold px-3 py-1 rounded-full ${vac.status === 'Valid' ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-700'}`}>{vac.status}</span>
+                                        </div>
+                                        <div className="flex justify-between text-sm text-slate-600"><span><strong>Given:</strong> {vac.date_administered}</span><span><strong>Expires:</strong> {vac.expiration_date}</span></div>
+                                    </div>
+                                ))}
+                            </div>
+                        ) : (<p className="text-slate-500 py-10 text-center">No records found.</p>)}
+                     </div>
+                  )}
+
+                  {dashTab === 'diseases' && (
+                     <div className="bg-white p-8 rounded-2xl border">
+                        <h3 className="text-xl font-bold mb-6 flex items-center gap-2"><Bug className="text-rose-600"/> Disease Screenings</h3>
+                        {patientData.diseases && patientData.diseases.length > 0 ? (
+                            <table className="w-full text-left">
+                                <thead className="bg-slate-50"><tr><th className="p-4">Condition</th><th className="p-4">Date Tested</th><th className="p-4">Result</th></tr></thead>
+                                <tbody>
+                                    {patientData.diseases.map((dis, idx) => (
+                                        <tr key={idx} className="border-b"><td className="p-4 font-semibold">{dis.name}</td><td className="p-4 text-slate-600">{dis.date_tested}</td>
+                                            <td className="p-4"><span className={`font-bold px-3 py-1 rounded-full text-sm ${dis.result === 'Negative' ? 'bg-emerald-50 text-emerald-600' : 'bg-red-50 text-red-600'}`}>{dis.result}</span></td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                        ) : (<p className="text-slate-500 py-10 text-center">No records found.</p>)}
+                     </div>
+                  )}
+                </>
+              )}
+
+              {view === 'upload' && activePatient && (
+                <div className="space-y-6">
+                  <div className="bg-white p-12 rounded-2xl shadow-sm border border-slate-100 text-center">
+                    <div className="w-20 h-20 bg-blue-50 rounded-full flex items-center justify-center mx-auto mb-6"><Upload size={32} className="text-blue-600" /></div>
+                    <h3 className="text-xl font-bold mb-2">Upload to {activePatient}'s Chart</h3>
+                    <label className="cursor-pointer bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-6 rounded-xl inline-block mt-4">
+                      <span>Browse File</span><input type="file" onChange={handleFileUpload} className="hidden" />
+                    </label>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        </>
+      )}
+    </div>
+  );
+}

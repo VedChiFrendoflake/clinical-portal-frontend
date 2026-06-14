@@ -75,6 +75,29 @@ export default function App() {
     }
   }, [patientData]);
 
+  // --- DETECT INCOMING FORWARDED FILES FROM WHATSAPP/INSTAGRAM SHARE MENU ---
+  useEffect(() => {
+    const urlParams = new URLSearchParams(window.location.search);
+    if (urlParams.get('incoming_share') === 'true') {
+      (async () => {
+        const cache = await caches.open('incoming-shares');
+        const cachedFile = await cache.match('shared-file');
+        if (cachedFile) {
+          const blob = await cachedFile.blob();
+          const file = new File([blob], "shared_document.pdf", { type: blob.type });
+          
+          const target = user?.role === 'Patient' ? user.real_name : activePatient;
+          if (target) {
+            processDocumentUpload(file, target);
+          } else {
+            alert("Document received via Share Menu! Log in and pick a patient profile to automatically file it.");
+          }
+          await cache.delete('shared-file'); // Clear cache to prevent duplicate triggers
+        }
+      })();
+    }
+  }, [user, activePatient]);
+
   const handleLogin = async (e) => {
     e.preventDefault();
     setAuthError('');
@@ -223,7 +246,7 @@ export default function App() {
         body: JSON.stringify({ target_patient: target, ...prescriptionInput })
       });
       const data = await res.json();
-      alert(data.message); setPrescriptionInput({ medication_name: '', dosage: '', instructions: '' }); fetchPatientData(target);
+      alert(data.message); setType: prescriptionInput({ medication_name: '', dosage: '', instructions: '' }); fetchPatientData(target);
     } catch (err) { alert("Failed to add prescription."); }
   };
 

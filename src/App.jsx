@@ -158,6 +158,48 @@ export default function App() {
     }
   }, [user, activePatient]);
 
+  // 🌟 ANDROID PWA "OPEN WITH" FILE INTERCEPTOR
+  useEffect(() => {
+    if ('launchQueue' in window) {
+      window.launchQueue.setConsumer(async (launchParams) => {
+        if (!launchParams.files || launchParams.files.length === 0) return;
+
+        try {
+          // Grab the file Android is handing us
+          const fileHandle = launchParams.files[0];
+          const file = await fileHandle.getFile();
+          
+          console.log("Caught native file from Android:", file.name);
+          const target = user?.role === 'Patient' ? user.real_name : (activePatient || "John Doe");
+
+          if (target && target !== "John Doe") {
+            // If we have an active patient selected, push it through the standard pipeline
+            processDocumentUpload(file, target);
+            alert(`Successfully queued ${file.name} for ${target}!`);
+          } else {
+            // Fallback for offline/unauthenticated native launches
+            const formData = new FormData();
+            formData.append("file", file);
+            formData.append("target_patient", "John Doe"); 
+            formData.append("uploader_name", user?.real_name || "Android Native Upload");
+            formData.append("force_override", "false");
+
+            await fetch(`${BACKEND_URL}/api/upload`, {
+              method: "POST",
+              body: formData,
+            });
+            
+            alert(`Successfully imported ${file.name} to the matrix under ${target}!`);
+            if (activePatient === "John Doe") fetchPatientData("John Doe");
+          }
+        } catch (err) {
+          console.error("Failed to parse native file handle:", err);
+          alert("Failed to process external file access.");
+        }
+      });
+    }
+  }, [user, activePatient]);
+
   const handleLogin = async (e) => {
     e.preventDefault();
     setAuthError('');

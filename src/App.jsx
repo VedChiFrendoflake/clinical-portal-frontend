@@ -39,6 +39,8 @@ export default function App() {
   const [prescriptionInput, setPrescriptionInput] = useState({ medication_name: '', dosage: '', instructions: '' });
   const [orderInput, setOrderInput] = useState({ test_name: '', reason: '' });
 
+  const [isScanning, setIsScanning] = useState(false);
+
   // --- GOOGLE TRANSLATE WITH AUTO-DETECT ---
   useEffect(() => {
     const userLang = navigator.language || navigator.userLanguage;
@@ -75,24 +77,81 @@ export default function App() {
     }
   }, [patientData]);
 
-  // --- DETECT INCOMING FORWARDED FILES FROM WHATSAPP/INSTAGRAM SHARE MENU ---
+  // --- SMART DETECTION FOR FORWARDED TEXT STRINGS OR IMAGES FROM SHARE MENU ---
   useEffect(() => {
     const urlParams = new URLSearchParams(window.location.search);
     if (urlParams.get('incoming_share') === 'true') {
       (async () => {
         const cache = await caches.open('incoming-shares');
+        const target = user?.role === 'Patient' ? user.real_name : activePatient;
+
+        // 🔍 PIPELINE A: Check for Shared Images or PDFs
         const cachedFile = await cache.match('shared-file');
         if (cachedFile) {
           const blob = await cachedFile.blob();
           const file = new File([blob], "shared_document.pdf", { type: blob.type });
           
-          const target = user?.role === 'Patient' ? user.real_name : activePatient;
           if (target) {
             processDocumentUpload(file, target);
           } else {
-            alert("Document received via Share Menu! Log in and pick a patient profile to automatically file it.");
+            // Trigger Smart OCR Prediction if no patient chart is actively selected on screen
+            setIsScanning(true);
+            const formData = new FormData();
+            formData.append('file', file);
+            try {
+              const res = await fetch('https://clinical-portal-backend-production.up.railway.app/api/predict-patient', {
+                method: 'POST',
+                body: formData
+              });
+              const data = await res.json();
+              setIsScanning(false);
+
+              if (data.matched_patient) {
+                const confirmAutoFile = window.confirm(
+                  `Smart Scan Results:\n\nWe detected this document belongs to "${data.matched_patient}".\n\nWould you like to automatically upload it to their chart?`
+                );
+                if (confirmAutoFile) {
+                  processDocumentUpload(file, data.matched_patient);
+                }
+              } else {
+                alert("Smart Scan couldn't confidently read a patient name. Please log in and select the patient chart manually.");
+              }
+            } catch (err) {
+              setIsScanning(false);
+              alert("Image document received! Please log in and pick a patient chart profile manually to file it.");
+            }
           }
           await cache.delete('shared-file'); // Clear cache to prevent duplicate triggers
+        }
+
+        // 📝 PIPELINE B: Check for Shared Raw Text Message Strings
+        const cachedText = await cache.match('shared-text');
+        if (cachedText) {
+          const sharedTextString = await cachedText.text();
+          
+          if (target) {
+            // Send the raw text to your server as an automatic encounter note log
+            try {
+              const dateStr = new Date().toISOString().split('T')[0];
+              const res = await fetch('https://clinical-portal-backend-production.up.railway.app/api/visit/note', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  target_patient: target,
+                  visit_date: dateStr,
+                  note: `[Shared Text Message via Forward Menu]:\n${sharedTextString}`
+                })
+              });
+              const responseData = await res.json();
+              alert(`Text snippet successfully appended to ${target}'s encounter notes!`);
+              fetchPatientData(target);
+            } catch (err) {
+              alert("Failed to append shared text string to the backend server notes.");
+            }
+          } else {
+            alert(`Text snippet received via Share Menu:\n\n"${sharedTextString}"\n\nPlease select a patient chart profile first to save this message data.`);
+          }
+          await cache.delete('shared-text'); // Clear cache to prevent duplicate triggers
         }
       })();
     }
@@ -163,7 +222,7 @@ export default function App() {
     const formData = new FormData();
     formData.append('file', file);
     formData.append('target_patient', target);
-    formData.append('uploader_name', user.real_name);
+    formData.append('uploader_name', user?.real_name || "System Share External");
     formData.append('force_override', force); 
 
     try {
@@ -172,7 +231,7 @@ export default function App() {
       
       if (data.status === 'warning') {
           const proceed = window.confirm(
-            `Are you sure you would like to upload this document for ${target}?`
+            `An encounter record already exists for today. Are you sure you would like to append this document for ${target}?`
           );
           if (proceed) { processDocumentUpload(file, target, 'true'); }
           return;
@@ -246,7 +305,7 @@ export default function App() {
         body: JSON.stringify({ target_patient: target, ...prescriptionInput })
       });
       const data = await res.json();
-      alert(data.message); setType: prescriptionInput({ medication_name: '', dosage: '', instructions: '' }); fetchPatientData(target);
+      alert(data.message); setPrescriptionInput({ medication_name: '', dosage: '', instructions: '' }); fetchPatientData(target);
     } catch (err) { alert("Failed to add prescription."); }
   };
 
@@ -812,6 +871,18 @@ export default function App() {
           </div>
         </>
       )}
+
+      {/* SMART SCANNING LOADING OVERLAY */}
+      {isScanning && (
+        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-[99999] flex flex-col justify-center items-center text-white">
+          <div className="bg-white p-8 rounded-2xl shadow-2xl flex flex-col items-center max-w-sm text-center border border-slate-100">
+            <Activity className="text-blue-600 animate-pulse mb-4 animate-spin" size={48} />
+            <h3 className="text-slate-900 font-bold text-lg mb-1">AI Smart Scanning Active</h3>
+            <p className="text-slate-500 text-sm">Reading the document layout to auto-detect the patient's identity...</p>
+          </div>
+        </div>
+      )}
+
     </div>
   );
 }

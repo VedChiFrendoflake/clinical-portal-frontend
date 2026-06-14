@@ -406,8 +406,26 @@ export default function App() {
                 )}
 
                 <form onSubmit={handleLogin} className="space-y-5">
-                  <input type="text" placeholder="Username" className="w-full p-3 border rounded-lg bg-slate-50" value={username} onChange={e => setUsername(e.target.value)} />
-                  <input type="password" placeholder="Password" className="w-full p-3 border rounded-lg bg-slate-50" value={password} onChange={e => setPassword(e.target.value)} />
+                  <input 
+                    type="text" 
+                    id="login-username"
+                    name="username"
+                    autoComplete="username"
+                    placeholder="Username" 
+                    className="w-full p-3 border rounded-lg bg-slate-50" 
+                    value={username} 
+                    onChange={e => setUsername(e.target.value)} 
+                  />
+                  <input 
+                    type="password" 
+                    id="login-password"
+                    name="password"
+                    autoComplete="current-password"
+                    placeholder="Password" 
+                    className="w-full p-3 border rounded-lg bg-slate-50" 
+                    value={password} 
+                    onChange={e => setPassword(e.target.value)} 
+                  />
                   <button type="submit" className="w-full bg-blue-600 text-white font-bold py-3 rounded-lg hover:bg-blue-700">Secure Login</button>
                 </form>
                 <p className="text-center text-sm text-slate-500 mt-6">Don't have an account? <button type="button" onClick={() => {setView('register'); setAuthError('');}} className="text-blue-600 font-bold hover:underline">Sign up</button></p>
@@ -452,8 +470,28 @@ export default function App() {
                     </>
                   )}
 
-                  <input type="text" placeholder="Choose Username" required className="w-full p-3 border rounded-lg bg-slate-50 mt-4" value={username} onChange={e => setUsername(e.target.value)} />
-                  <input type="password" placeholder="Choose Password" required className="w-full p-3 border rounded-lg bg-slate-50" value={password} onChange={e => setPassword(e.target.value)} />
+                  <input 
+                    type="text" 
+                    id="reg-username"
+                    name="username"
+                    autoComplete="username"
+                    placeholder="Choose Username" 
+                    required 
+                    className="w-full p-3 border rounded-lg bg-slate-50 mt-4" 
+                    value={username} 
+                    onChange={e => setUsername(e.target.value)} 
+                  />
+                  <input 
+                    type="password" 
+                    id="reg-password"
+                    name="password"
+                    autoComplete="new-password"
+                    placeholder="Choose Password" 
+                    required 
+                    className="w-full p-3 border rounded-lg bg-slate-50" 
+                    value={password} 
+                    onChange={e => setPassword(e.target.value)} 
+                  />
                   <button type="submit" className="w-full bg-emerald-600 text-white font-bold py-3 rounded-lg hover:bg-emerald-700 mt-2">Register Now</button>
                 </form>
                 <p className="text-center text-sm text-slate-500 mt-6">Already have an account? <button type="button" onClick={() => {setView('login'); setAuthError('');}} className="text-emerald-600 font-bold hover:underline">Back to Login</button></p>

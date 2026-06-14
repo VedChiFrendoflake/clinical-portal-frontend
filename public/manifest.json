@@ -1,0 +1,36 @@
+{
+  "short_name": "ClinicalPortal",
+  "name": "Clinical Portal",
+  "icons": [
+    {
+      "src": "icon-192.png",
+      "type": "image/png",
+      "sizes": "192x192"
+    },
+    {
+      "src": "icon-512.png",
+      "type": "image/png",
+      "sizes": "512x512"
+    }
+  ],
+  "start_url": "/",
+  "background_color": "#f8fafc",
+  "theme_color": "#2563eb",
+  "display": "standalone",
+  "orientation": "portrait",
+  "share_target": {
+    "action": "/handle-share",
+    "method": "POST",
+    "enctype": "multipart/form-data",
+    "params": {
+      "title": "title",
+      "text": "text",
+      "files": [
+        {
+          "name": "shared_file",
+          "accept": ["image/*", "application/pdf"]
+        }
+      ]
+    }
+  }
+}

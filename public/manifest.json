@@ -1,37 +1,33 @@
 {
   "short_name": "ClinicalPortal",
-  "name": "Clinical Portal",
+  "name": "Clinical Portal Master Dashboard",
   "icons": [
     {
-      "src": "icon-192.png",
+      "src": "favicon.ico",
+      "sizes": "64x64 32x32 24x24 16x16",
+      "type": "image/x-icon"
+    },
+    {
+      "src": "logo192.png",
       "type": "image/png",
       "sizes": "192x192"
     },
     {
-      "src": "icon-512.png",
+      "src": "logo512.png",
       "type": "image/png",
       "sizes": "512x512"
     }
   ],
-  "start_url": "/",
-  "background_color": "#f8fafc",
-  "theme_color": "#2563eb",
+  "start_url": ".",
   "display": "standalone",
-  "orientation": "portrait",
-  "share_target": {
-    "action": "/handle-share",
-    "method": "POST",
-    "enctype": "multipart/form-data",
-    "params": {
-      "title": "title",
-      "text": "text",
-      "url": "url",
-      "files": [
-        {
-          "name": "shared_file",
-          "accept": ["image/*", "application/pdf"]
-        }
-      ]
+  "theme_color": "#000000",
+  "background_color": "#ffffff",
+  "file_handlers": [
+    {
+      "action": "/",
+      "accept": {
+        "application/pdf": [".pdf"]
+      }
     }
-  }
+  ]
 }

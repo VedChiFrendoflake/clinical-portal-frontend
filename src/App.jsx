@@ -94,7 +94,6 @@ export default function App() {
           if (target) {
             processDocumentUpload(file, target);
           } else {
-            // Trigger Smart OCR Prediction if no patient chart is actively selected on screen
             setIsScanning(true);
             const formData = new FormData();
             formData.append('file', file);
@@ -121,7 +120,7 @@ export default function App() {
               alert("Image document received! Please log in and pick a patient chart profile manually to file it.");
             }
           }
-          await cache.delete('shared-file'); // Clear cache to prevent duplicate triggers
+          await cache.delete('shared-file'); 
         }
 
         // 📝 PIPELINE B: Check for Shared Raw Text Message Strings
@@ -130,7 +129,6 @@ export default function App() {
           const sharedTextString = await cachedText.text();
           
           if (target) {
-            // Send the raw text to your server as an automatic encounter note log
             try {
               const dateStr = new Date().toISOString().split('T')[0];
               const res = await fetch('https://clinical-portal-backend-production.up.railway.app/api/visit/note', {
@@ -142,7 +140,7 @@ export default function App() {
                   note: `[Shared Text Message via Forward Menu]:\n${sharedTextString}`
                 })
               });
-              const responseData = await res.json();
+              await res.json();
               alert(`Text snippet successfully appended to ${target}'s encounter notes!`);
               fetchPatientData(target);
             } catch (err) {
@@ -151,7 +149,7 @@ export default function App() {
           } else {
             alert(`Text snippet received via Share Menu:\n\n"${sharedTextString}"\n\nPlease select a patient chart profile first to save this message data.`);
           }
-          await cache.delete('shared-text'); // Clear cache to prevent duplicate triggers
+          await cache.delete('shared-text'); 
         }
       })();
     }

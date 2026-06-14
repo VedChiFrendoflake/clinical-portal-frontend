@@ -1,0 +1,12 @@
+{
+  "background_color": "#21bacc",
+  "dir": "ltr",
+  "display": "standalone",
+  "name": "Clinical Portal",
+  "orientation": "any",
+  "scope": "/",
+  "short_name": "CliniPort",
+  "start_url": "/",
+  "theme_color": "#20c3ba",
+  "id": "com.clinicalportal.app"
+}

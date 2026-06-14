@@ -2,6 +2,9 @@ import React, { useState, useEffect } from 'react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine, Legend } from 'recharts';
 import { Activity, Upload, User, ShieldCheck, UserPlus, Search, Users, CheckCircle, ActivitySquare, Syringe, Bug, FlaskConical, AlertTriangle, ShieldAlert, Ruler, Scale, Calculator, ClipboardList, Edit3, Save, Stethoscope, FileText, Pill, FileSignature, Settings } from 'lucide-react';
 
+// ⚠️ STEP 1: CHANGE THIS LINK TO YOUR ACTUAL LIVE RAILWAY BACKEND URL FROM YOUR DASHBOARD
+const BACKEND_URL = "https://clinical-portal-backend-production.up.railway.app";
+
 export default function App() {
   const [user, setUser] = useState(null);
   const [view, setView] = useState('login'); 
@@ -98,7 +101,7 @@ export default function App() {
             const formData = new FormData();
             formData.append('file', file);
             try {
-              const res = await fetch('https://clinical-portal-backend-production.up.railway.app/api/predict-patient', {
+              const res = await fetch(`${BACKEND_URL}/api/predict-patient`, {
                 method: 'POST',
                 body: formData
               });
@@ -131,7 +134,7 @@ export default function App() {
           if (target) {
             try {
               const dateStr = new Date().toISOString().split('T')[0];
-              const res = await fetch('https://clinical-portal-backend-production.up.railway.app/api/visit/note', {
+              const res = await fetch(`${BACKEND_URL}/api/visit/note`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
@@ -159,7 +162,7 @@ export default function App() {
     e.preventDefault();
     setAuthError('');
     try {
-      const res = await fetch('https://clinical-portal-backend-production.up.railway.app/api/login', {
+      const res = await fetch(`${BACKEND_URL}/api/login`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ username, password })
       });
@@ -179,7 +182,7 @@ export default function App() {
     e.preventDefault();
     setAuthError('');
     try {
-      const res = await fetch('https://clinical-portal-backend-production.up.railway.app/api/register', {
+      const res = await fetch(`${BACKEND_URL}/api/register`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 
             username, password, real_name: regName, role: regRole,
@@ -202,7 +205,7 @@ export default function App() {
 
   const fetchPatientData = async (name) => {
     try {
-      const res = await fetch(`https://clinical-portal-backend-production.up.railway.app/api/patient/${encodeURIComponent(name)}`);
+      const res = await fetch(`${BACKEND_URL}/api/patient/${encodeURIComponent(name)}`);
       const data = await res.json();
       setPatientData(data);
       setActivePatient(name);
@@ -224,7 +227,7 @@ export default function App() {
     formData.append('force_override', force); 
 
     try {
-      const res = await fetch('https://clinical-portal-backend-production.up.railway.app/api/upload', { method: 'POST', body: formData });
+      const res = await fetch(`${BACKEND_URL}/api/upload`, { method: 'POST', body: formData });
       const data = await res.json();
       
       if (data.status === 'warning') {
@@ -258,7 +261,7 @@ export default function App() {
   const handleSaveProfile = async () => {
     const target = user.role === 'Patient' ? user.real_name : activePatient;
     try {
-      const res = await fetch('https://clinical-portal-backend-production.up.railway.app/api/profile', {
+      const res = await fetch(`${BACKEND_URL}/api/profile`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ target_patient: target, ...profileForm })
       });
@@ -270,7 +273,7 @@ export default function App() {
   const handleSaveVisitNote = async (date) => {
     const target = user.role === 'Patient' ? user.real_name : activePatient;
     try {
-      const res = await fetch('https://clinical-portal-backend-production.up.railway.app/api/visit/note', {
+      const res = await fetch(`${BACKEND_URL}/api/visit/note`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ target_patient: target, visit_date: date, note: visitNotes[date] })
       });
@@ -284,7 +287,7 @@ export default function App() {
     const target = user.role === 'Patient' ? user.real_name : activePatient;
     if (!vitalsInput.height || !vitalsInput.weight) return alert("Please enter both height and weight.");
     try {
-      const res = await fetch('https://clinical-portal-backend-production.up.railway.app/api/vitals', {
+      const res = await fetch(`${BACKEND_URL}/api/vitals`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ target_patient: target, height_cm: parseFloat(vitalsInput.height), weight_kg: parseFloat(vitalsInput.weight) })
       });
@@ -298,7 +301,7 @@ export default function App() {
     const target = user.role === 'Patient' ? user.real_name : activePatient;
     if (!prescriptionInput.medication_name) return alert("Please enter medication name.");
     try {
-      const res = await fetch('https://clinical-portal-backend-production.up.railway.app/api/prescriptions', {
+      const res = await fetch(`${BACKEND_URL}/api/prescriptions`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ target_patient: target, ...prescriptionInput })
       });
@@ -312,7 +315,7 @@ export default function App() {
     const target = user.role === 'Patient' ? user.real_name : activePatient;
     if (!orderInput.test_name) return alert("Please enter a test name.");
     try {
-      const res = await fetch('https://clinical-portal-backend-production.up.railway.app/api/orders', {
+      const res = await fetch(`${BACKEND_URL}/api/orders`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ target_patient: target, ...orderInput })
       });
@@ -627,7 +630,7 @@ export default function App() {
                                 <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100">
                                     <h3 className="font-bold text-slate-800 mb-4 flex items-center gap-2"><Edit3 className="text-cyan-600" size={20}/> New Prescription</h3>
                                     <form onSubmit={handleAddPrescription} className="space-y-4">
-                                        <div><label className="text-xs font-bold text-slate-500 uppercase">Medication Name</label><input type="text" required value={prescriptionInput.medication_name} onChange={e => setPrescriptionInput({...prescriptionInput, medication_name: e.target.value})} className="w-full p-2 border rounded bg-slate-50" /></div>
+                                        <div><label className="text-xs font-bold text-slate-500 uppercase">Medication Name</label><input type="text" required value={prescriptionInput.medication_name} onChange={e => setProof => setPrescriptionInput({...prescriptionInput, medication_name: e.target.value})} className="w-full p-2 border rounded bg-slate-50" /></div>
                                         <div><label className="text-xs font-bold text-slate-500 uppercase">Dosage</label><input type="text" required value={prescriptionInput.dosage} onChange={e => setPrescriptionInput({...prescriptionInput, dosage: e.target.value})} className="w-full p-2 border rounded bg-slate-50" placeholder="e.g. 50mg" /></div>
                                         <div><label className="text-xs font-bold text-slate-500 uppercase">Instructions (Sig)</label><textarea required value={prescriptionInput.instructions} onChange={e => setPrescriptionInput({...prescriptionInput, instructions: e.target.value})} className="w-full p-2 border rounded bg-slate-50 h-24" placeholder="e.g. Take 1 tablet by mouth daily"></textarea></div>
                                         <button type="submit" className="w-full bg-cyan-600 text-white font-bold py-2 rounded">Prescribe</button>

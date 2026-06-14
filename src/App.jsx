@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine, Legend } from 'recharts';
 import { Activity, Upload, User, ShieldCheck, UserPlus, Search, Users, CheckCircle, ActivitySquare, Syringe, Bug, FlaskConical, AlertTriangle, ShieldAlert, Ruler, Scale, Calculator, ClipboardList, Edit3, Save, Stethoscope, FileText, Pill, FileSignature, Settings } from 'lucide-react';
 
-// ⚠️ STEP 1: REPLACE THIS LINK WITH YOUR ACTUAL LIVE RAILWAY BACKEND URL FROM YOUR DASHBOARD
+// Live production backend URL centralized
 const BACKEND_URL = "https://clinical-portal-backend-production.up.railway.app";
 
 export default function App() {

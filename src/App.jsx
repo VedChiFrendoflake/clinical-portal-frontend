@@ -88,7 +88,6 @@ export default function App() {
         const cache = await caches.open('incoming-shares');
         const target = user?.role === 'Patient' ? user.real_name : activePatient;
 
-        // 🔍 PIPELINE A: Check for Shared Images or PDFs
         const cachedFile = await cache.match('shared-file');
         if (cachedFile) {
           const blob = await cachedFile.blob();
@@ -101,20 +100,13 @@ export default function App() {
             const formData = new FormData();
             formData.append('file', file);
             try {
-              const res = await fetch(`${BACKEND_URL}/api/predict-patient`, {
-                method: 'POST',
-                body: formData
-              });
+              const res = await fetch(`${BACKEND_URL}/api/predict-patient`, { method: 'POST', body: formData });
               const data = await res.json();
               setIsScanning(false);
 
               if (data.matched_patient) {
-                const confirmAutoFile = window.confirm(
-                  `Smart Scan Results:\n\nWe detected this document belongs to "${data.matched_patient}".\n\nWould you like to automatically upload it to their chart?`
-                );
-                if (confirmAutoFile) {
-                  processDocumentUpload(file, data.matched_patient);
-                }
+                const confirmAutoFile = window.confirm(`Smart Scan Results:\n\nWe detected this document belongs to "${data.matched_patient}".\n\nWould you like to automatically upload it to their chart?`);
+                if (confirmAutoFile) processDocumentUpload(file, data.matched_patient);
               } else {
                 alert("Smart Scan couldn't confidently read a patient name. Please log in and select the patient chart manually.");
               }
@@ -126,29 +118,19 @@ export default function App() {
           await cache.delete('shared-file'); 
         }
 
-        // 📝 PIPELINE B: Check for Shared Raw Text Message Strings
         const cachedText = await cache.match('shared-text');
         if (cachedText) {
           const sharedTextString = await cachedText.text();
-          
           if (target) {
             try {
               const dateStr = new Date().toISOString().split('T')[0];
-              const res = await fetch(`${BACKEND_URL}/api/visit/note`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                  target_patient: target,
-                  visit_date: dateStr,
-                  note: `[Shared Text Message via Forward Menu]:\n${sharedTextString}`
-                })
+              await fetch(`${BACKEND_URL}/api/visit/note`, {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ target_patient: target, visit_date: dateStr, note: `[Shared Text Message via Forward Menu]:\n${sharedTextString}` })
               });
-              await res.json();
               alert(`Text snippet successfully appended to ${target}'s encounter notes!`);
               fetchPatientData(target);
-            } catch (err) {
-              alert("Failed to append shared text string to the backend server notes.");
-            }
+            } catch (err) { alert("Failed to append shared text string to the backend server notes."); }
           } else {
             alert(`Text snippet received via Share Menu:\n\n"${sharedTextString}"\n\nPlease select a patient chart profile first to save this message data.`);
           }
@@ -163,39 +145,25 @@ export default function App() {
     if ('launchQueue' in window) {
       window.launchQueue.setConsumer(async (launchParams) => {
         if (!launchParams.files || launchParams.files.length === 0) return;
-
         try {
-          // Grab the file Android is handing us
           const fileHandle = launchParams.files[0];
           const file = await fileHandle.getFile();
-          
-          console.log("Caught native file from Android:", file.name);
           const target = user?.role === 'Patient' ? user.real_name : (activePatient || "John Doe");
 
           if (target && target !== "John Doe") {
-            // If we have an active patient selected, push it through the standard pipeline
             processDocumentUpload(file, target);
             alert(`Successfully queued ${file.name} for ${target}!`);
           } else {
-            // Fallback for offline/unauthenticated native launches
             const formData = new FormData();
             formData.append("file", file);
             formData.append("target_patient", "John Doe"); 
             formData.append("uploader_name", user?.real_name || "Android Native Upload");
             formData.append("force_override", "false");
-
-            await fetch(`${BACKEND_URL}/api/upload`, {
-              method: "POST",
-              body: formData,
-            });
-            
+            await fetch(`${BACKEND_URL}/api/upload`, { method: "POST", body: formData });
             alert(`Successfully imported ${file.name} to the matrix under ${target}!`);
             if (activePatient === "John Doe") fetchPatientData("John Doe");
           }
-        } catch (err) {
-          console.error("Failed to parse native file handle:", err);
-          alert("Failed to process external file access.");
-        }
+        } catch (err) { alert("Failed to process external file access."); }
       });
     }
   }, [user, activePatient]);
@@ -271,11 +239,8 @@ export default function App() {
     try {
       const res = await fetch(`${BACKEND_URL}/api/upload`, { method: 'POST', body: formData });
       const data = await res.json();
-      
       if (data.status === 'warning') {
-          const proceed = window.confirm(
-            `An encounter record already exists for today. Are you sure you would like to append this document for ${target}?`
-          );
+          const proceed = window.confirm(`An encounter record already exists for today. Are you sure you would like to append this document for ${target}?`);
           if (proceed) { processDocumentUpload(file, target, 'true'); }
           return;
       }
@@ -286,16 +251,10 @@ export default function App() {
   const handleFileUpload = async (e) => {
     const file = e.target.files[0];
     if (!file) return;
-    
     const target = user.role === 'Patient' ? user.real_name : activePatient;
     if (!target) return alert("Please select a patient first.");
-
     const proceed = window.confirm(`Are you sure you would like to upload this document for ${target}?`);
-    if (!proceed) {
-        e.target.value = null; 
-        return;
-    }
-
+    if (!proceed) { e.target.value = null; return; }
     processDocumentUpload(file, target);
     e.target.value = null; 
   };
@@ -386,45 +345,28 @@ export default function App() {
     <div className={`min-h-screen bg-slate-50 text-slate-800 font-sans ${textClass}`}>
       
       {/* FLOATING GOOGLE TRANSLATE WIDGET */}
-      <div 
-        id="google_translate_element" 
-        className="fixed bottom-6 right-6 z-[9999] shadow-2xl rounded-lg overflow-hidden border border-slate-200 bg-white p-1"
-      ></div>
+      <div id="google_translate_element" className="fixed bottom-6 right-6 z-[9999] shadow-2xl rounded-lg overflow-hidden border border-slate-200 bg-white p-1"></div>
 
       {!user ? (
-        <div className="flex flex-col justify-center items-center py-12 min-h-screen">
-          <div className="bg-white p-10 rounded-2xl shadow-xl w-full max-w-lg border border-slate-100">
+        <div className="flex flex-col justify-center items-center py-12 px-4 min-h-screen">
+          <div className="bg-white p-8 md:p-10 rounded-2xl shadow-xl w-full max-w-lg border border-slate-100">
             {view === 'login' ? (
               <>
                 <div className="flex justify-center mb-6"><ShieldCheck size={56} className="text-blue-600" /></div>
                 <h2 className="text-2xl font-bold text-center text-slate-800 mb-8">Clinical Portal</h2>
                 
                 {authError && (
-                  <div className="bg-red-50 text-red-600 p-3 rounded-lg text-sm font-bold mb-6 border border-red-100 text-center">
-                    {authError}
-                  </div>
+                  <div className="bg-red-50 text-red-600 p-3 rounded-lg text-sm font-bold mb-6 border border-red-100 text-center">{authError}</div>
                 )}
 
                 <form onSubmit={handleLogin} className="space-y-5">
                   <input 
-                    type="text" 
-                    id="login-username"
-                    name="username"
-                    autoComplete="username"
-                    placeholder="Username" 
-                    className="w-full p-3 border rounded-lg bg-slate-50" 
-                    value={username} 
-                    onChange={e => setUsername(e.target.value)} 
+                    type="text" id="login-username" name="username" autoComplete="username" placeholder="Username" 
+                    className="w-full p-3 border rounded-lg bg-slate-50" value={username} onChange={e => setUsername(e.target.value)} 
                   />
                   <input 
-                    type="password" 
-                    id="login-password"
-                    name="password"
-                    autoComplete="current-password"
-                    placeholder="Password" 
-                    className="w-full p-3 border rounded-lg bg-slate-50" 
-                    value={password} 
-                    onChange={e => setPassword(e.target.value)} 
+                    type="password" id="login-password" name="password" autoComplete="current-password" placeholder="Password" 
+                    className="w-full p-3 border rounded-lg bg-slate-50" value={password} onChange={e => setPassword(e.target.value)} 
                   />
                   <button type="submit" className="w-full bg-blue-600 text-white font-bold py-3 rounded-lg hover:bg-blue-700">Secure Login</button>
                 </form>
@@ -436,9 +378,7 @@ export default function App() {
                 <h2 className="text-2xl font-bold text-center text-slate-800 mb-8">Create Account</h2>
                 
                 {authError && (
-                  <div className="bg-red-50 text-red-600 p-3 rounded-lg text-sm font-bold mb-6 border border-red-100 text-center">
-                    {authError}
-                  </div>
+                  <div className="bg-red-50 text-red-600 p-3 rounded-lg text-sm font-bold mb-6 border border-red-100 text-center">{authError}</div>
                 )}
 
                 <form onSubmit={handleRegister} className="space-y-4">
@@ -450,47 +390,33 @@ export default function App() {
                   
                   {regRole === 'Patient' && (
                     <>
-                      <div className="flex gap-2">
-                          <input type="number" placeholder="Age" required className="w-1/3 p-3 border rounded-lg bg-slate-50" value={regAge} onChange={e => setRegAge(e.target.value)} />
-                          <select className="w-2/3 p-3 border rounded-lg bg-slate-50" value={regGender} onChange={e => setRegGender(e.target.value)}>
+                      <div className="flex flex-col sm:flex-row gap-2">
+                          <input type="number" placeholder="Age" required className="w-full sm:w-1/3 p-3 border rounded-lg bg-slate-50" value={regAge} onChange={e => setRegAge(e.target.value)} />
+                          <select className="w-full sm:w-2/3 p-3 border rounded-lg bg-slate-50" value={regGender} onChange={e => setRegGender(e.target.value)}>
                               <option value="Male">Male</option>
                               <option value="Female">Female</option>
                               <option value="Other">Other</option>
                           </select>
                       </div>
-                      <div className="flex gap-2">
-                          <input type="email" placeholder="Email" required className="w-1/2 p-3 border rounded-lg bg-slate-50" value={regEmail} onChange={e => setRegEmail(e.target.value)} />
-                          <input type="tel" placeholder="Phone" required className="w-1/2 p-3 border rounded-lg bg-slate-50" value={regPhone} onChange={e => setRegPhone(e.target.value)} />
+                      <div className="flex flex-col sm:flex-row gap-2">
+                          <input type="email" placeholder="Email" required className="w-full sm:w-1/2 p-3 border rounded-lg bg-slate-50" value={regEmail} onChange={e => setRegEmail(e.target.value)} />
+                          <input type="tel" placeholder="Phone" required className="w-full sm:w-1/2 p-3 border rounded-lg bg-slate-50" value={regPhone} onChange={e => setRegPhone(e.target.value)} />
                       </div>
                       <input type="text" placeholder="Street Address" className="w-full p-3 border rounded-lg bg-slate-50" value={regStreet} onChange={e => setRegStreet(e.target.value)} />
-                      <div className="flex gap-2">
-                          <input type="text" placeholder="State/Province" className="w-1/2 p-3 border rounded-lg bg-slate-50" value={regState} onChange={e => setRegState(e.target.value)} />
-                          <input type="text" placeholder="Country" className="w-1/2 p-3 border rounded-lg bg-slate-50" value={regCountry} onChange={e => setRegCountry(e.target.value)} />
+                      <div className="flex flex-col sm:flex-row gap-2">
+                          <input type="text" placeholder="State/Province" className="w-full sm:w-1/2 p-3 border rounded-lg bg-slate-50" value={regState} onChange={e => setRegState(e.target.value)} />
+                          <input type="text" placeholder="Country" className="w-full sm:w-1/2 p-3 border rounded-lg bg-slate-50" value={regCountry} onChange={e => setRegCountry(e.target.value)} />
                       </div>
                     </>
                   )}
 
                   <input 
-                    type="text" 
-                    id="reg-username"
-                    name="username"
-                    autoComplete="username"
-                    placeholder="Choose Username" 
-                    required 
-                    className="w-full p-3 border rounded-lg bg-slate-50 mt-4" 
-                    value={username} 
-                    onChange={e => setUsername(e.target.value)} 
+                    type="text" id="reg-username" name="username" autoComplete="username" placeholder="Choose Username" required 
+                    className="w-full p-3 border rounded-lg bg-slate-50 mt-4" value={username} onChange={e => setUsername(e.target.value)} 
                   />
                   <input 
-                    type="password" 
-                    id="reg-password"
-                    name="password"
-                    autoComplete="new-password"
-                    placeholder="Choose Password" 
-                    required 
-                    className="w-full p-3 border rounded-lg bg-slate-50" 
-                    value={password} 
-                    onChange={e => setPassword(e.target.value)} 
+                    type="password" id="reg-password" name="password" autoComplete="new-password" placeholder="Choose Password" required 
+                    className="w-full p-3 border rounded-lg bg-slate-50" value={password} onChange={e => setPassword(e.target.value)} 
                   />
                   <button type="submit" className="w-full bg-emerald-600 text-white font-bold py-3 rounded-lg hover:bg-emerald-700 mt-2">Register Now</button>
                 </form>
@@ -501,21 +427,21 @@ export default function App() {
         </div>
       ) : (
         <>
-          <nav className="bg-white shadow-sm border-b px-8 py-4 flex justify-between items-center fixed w-full z-10 top-0">
+          <nav className="bg-white shadow-sm border-b px-4 md:px-8 py-4 flex flex-wrap gap-4 justify-between items-center fixed w-full z-20 top-0">
             <h1 className="text-xl font-bold text-blue-600 flex items-center gap-2"><Activity /> ClinicalPortal</h1>
-            <div className="flex gap-4 items-center">
-              <button onClick={() => setTextSize(textSize === 'normal' ? 'large' : 'normal')} className="text-slate-400 hover:text-blue-600 mr-4" title="Toggle Accessibility Text Size"><Settings size={18} /></button>
-              <span className="text-sm font-medium bg-slate-100 px-3 py-1 rounded-full">{user.real_name} ({user.role})</span>
+            <div className="flex gap-3 md:gap-4 items-center">
+              <button onClick={() => setTextSize(textSize === 'normal' ? 'large' : 'normal')} className="text-slate-400 hover:text-blue-600 md:mr-4" title="Toggle Accessibility Text Size"><Settings size={18} /></button>
+              <span className="text-xs md:text-sm font-medium bg-slate-100 px-3 py-1 rounded-full">{user.real_name} ({user.role})</span>
               <button onClick={() => {setUser(null); setView('login');}} className="text-sm text-slate-500 hover:text-red-500 font-medium">Log Out</button>
             </div>
           </nav>
 
-          <div className="pt-28 px-8 max-w-7xl mx-auto grid grid-cols-4 gap-8 pb-12">
-            <div className="col-span-1 bg-white p-6 rounded-2xl shadow-sm border border-slate-100 h-fit sticky top-28">
+          <div className="pt-[110px] lg:pt-28 px-4 md:px-8 max-w-7xl mx-auto grid grid-cols-1 lg:grid-cols-4 gap-6 md:gap-8 pb-12">
+            <div className="col-span-1 bg-white p-6 rounded-2xl shadow-sm border border-slate-100 h-fit lg:sticky lg:top-28">
               <div className="flex items-center gap-4 mb-6">
-                <div className="h-12 w-12 bg-blue-100 text-blue-600 flex items-center justify-center rounded-full font-bold text-xl"><User /></div>
+                <div className="h-12 w-12 bg-blue-100 text-blue-600 flex items-center justify-center rounded-full font-bold text-xl min-w-[3rem]"><User /></div>
                 <div>
-                  <p className="font-bold text-slate-800">{user.real_name}</p>
+                  <p className="font-bold text-slate-800 leading-tight">{user.real_name}</p>
                   <p className="text-xs text-slate-500 font-mono">{user.role}</p>
                 </div>
               </div>
@@ -527,41 +453,41 @@ export default function App() {
                 {activePatient && (
                   <>
                     <li><button onClick={() => setView('dashboard')} className={`w-full text-left p-3 rounded-xl transition ${view === 'dashboard' ? 'bg-blue-50 text-blue-700 font-bold' : 'hover:bg-slate-50 text-slate-600'}`}>Chart: {activePatient}</button></li>
-                    <li><button onClick={() => setView('upload')} className={`w-full text-left p-3 rounded-xl transition ${view === 'upload' ? 'bg-blue-50 text-blue-700 font-bold' : 'hover:bg-slate-50 text-slate-600'}`}>Upload Documents</button></li>
+                    <li><button onClick={() => setView('upload')} className={`w-full text-left p-3 rounded-xl transition flex items-center gap-2 ${view === 'upload' ? 'bg-blue-50 text-blue-700 font-bold' : 'hover:bg-slate-50 text-slate-600'}`}><Upload size={18}/> Upload</button></li>
                   </>
                 )}
               </ul>
             </div>
 
-            <div className="col-span-3 space-y-6">
+            <div className="col-span-1 lg:col-span-3 space-y-6">
               {view === 'provider_search' && (
-                 <div className="bg-white p-10 rounded-2xl shadow-sm border border-slate-100">
+                 <div className="bg-white p-6 md:p-10 rounded-2xl shadow-sm border border-slate-100">
                    <h3 className="text-xl font-bold mb-6 flex items-center gap-2"><Search className="text-blue-600"/> Find Patient Chart</h3>
-                   <div className="flex gap-4">
+                   <div className="flex flex-col sm:flex-row gap-4">
                      <input type="text" placeholder="Enter patient name" className="flex-1 p-4 border border-slate-200 rounded-xl bg-slate-50" value={searchQuery} onChange={e => setSearchQuery(e.target.value)} />
-                     <button onClick={() => fetchPatientData(searchQuery)} className="bg-blue-600 text-white px-8 font-bold rounded-xl hover:bg-blue-700 transition">Access Chart</button>
+                     <button onClick={() => fetchPatientData(searchQuery)} className="bg-blue-600 text-white px-8 py-4 sm:py-0 font-bold rounded-xl hover:bg-blue-700 transition">Access Chart</button>
                    </div>
                  </div>
               )}
 
               {view === 'dashboard' && activePatient && (
                 <>
-                  <div className="bg-white p-2 rounded-xl shadow-sm border border-slate-100 flex gap-2 overflow-x-auto">
-                     <button onClick={() => setDashTab('profile')} className={`flex-1 min-w-[120px] py-3 rounded-lg font-bold flex items-center justify-center gap-2 transition ${dashTab === 'profile' ? 'bg-emerald-50 text-emerald-700' : 'text-slate-500 hover:bg-slate-50'}`}><ClipboardList size={18}/> Profile</button>
-                     <button onClick={() => setDashTab('visits')} className={`flex-1 min-w-[120px] py-3 rounded-lg font-bold flex items-center justify-center gap-2 transition ${dashTab === 'visits' ? 'bg-purple-50 text-purple-700' : 'text-slate-500 hover:bg-slate-50'}`}><Stethoscope size={18}/> Encounters</button>
-                     <button onClick={() => setDashTab('prescriptions')} className={`flex-1 min-w-[120px] py-3 rounded-lg font-bold flex items-center justify-center gap-2 transition ${dashTab === 'prescriptions' ? 'bg-cyan-50 text-cyan-700' : 'text-slate-500 hover:bg-slate-50'}`}><Pill size={18}/> Rx & Meds</button>
-                     <button onClick={() => setDashTab('orders')} className={`flex-1 min-w-[120px] py-3 rounded-lg font-bold flex items-center justify-center gap-2 transition ${dashTab === 'orders' ? 'bg-pink-50 text-pink-700' : 'text-slate-500 hover:bg-slate-50'}`}><FileSignature size={18}/> Orders</button>
-                     <button onClick={() => setDashTab('labs')} className={`flex-1 min-w-[120px] py-3 rounded-lg font-bold flex items-center justify-center gap-2 transition ${dashTab === 'labs' ? 'bg-blue-50 text-blue-700' : 'text-slate-500 hover:bg-slate-50'}`}><FlaskConical size={18}/> Labs</button>
-                     <button onClick={() => setDashTab('growth')} className={`flex-1 min-w-[120px] py-3 rounded-lg font-bold flex items-center justify-center gap-2 transition ${dashTab === 'growth' ? 'bg-orange-50 text-orange-700' : 'text-slate-500 hover:bg-slate-50'}`}><Ruler size={18}/> Vitals</button>
-                     <button onClick={() => setDashTab('vaccines')} className={`flex-1 min-w-[120px] py-3 rounded-lg font-bold flex items-center justify-center gap-2 transition ${dashTab === 'vaccines' ? 'bg-indigo-50 text-indigo-700' : 'text-slate-500 hover:bg-slate-50'}`}><Syringe size={18}/> Vaccines</button>
-                     <button onClick={() => setDashTab('diseases')} className={`flex-1 min-w-[120px] py-3 rounded-lg font-bold flex items-center justify-center gap-2 transition ${dashTab === 'diseases' ? 'bg-rose-50 text-rose-700' : 'text-slate-500 hover:bg-slate-50'}`}><Bug size={18}/> Screenings</button>
+                  <div className="bg-white p-2 rounded-xl shadow-sm border border-slate-100 flex gap-2 overflow-x-auto snap-x">
+                     <button onClick={() => setDashTab('profile')} className={`flex-1 min-w-[120px] snap-start py-3 rounded-lg font-bold flex flex-col sm:flex-row items-center justify-center gap-1 sm:gap-2 transition text-sm sm:text-base ${dashTab === 'profile' ? 'bg-emerald-50 text-emerald-700' : 'text-slate-500 hover:bg-slate-50'}`}><ClipboardList size={18}/> Profile</button>
+                     <button onClick={() => setDashTab('visits')} className={`flex-1 min-w-[120px] snap-start py-3 rounded-lg font-bold flex flex-col sm:flex-row items-center justify-center gap-1 sm:gap-2 transition text-sm sm:text-base ${dashTab === 'visits' ? 'bg-purple-50 text-purple-700' : 'text-slate-500 hover:bg-slate-50'}`}><Stethoscope size={18}/> Encounters</button>
+                     <button onClick={() => setDashTab('prescriptions')} className={`flex-1 min-w-[120px] snap-start py-3 rounded-lg font-bold flex flex-col sm:flex-row items-center justify-center gap-1 sm:gap-2 transition text-sm sm:text-base ${dashTab === 'prescriptions' ? 'bg-cyan-50 text-cyan-700' : 'text-slate-500 hover:bg-slate-50'}`}><Pill size={18}/> Rx & Meds</button>
+                     <button onClick={() => setDashTab('orders')} className={`flex-1 min-w-[120px] snap-start py-3 rounded-lg font-bold flex flex-col sm:flex-row items-center justify-center gap-1 sm:gap-2 transition text-sm sm:text-base ${dashTab === 'orders' ? 'bg-pink-50 text-pink-700' : 'text-slate-500 hover:bg-slate-50'}`}><FileSignature size={18}/> Orders</button>
+                     <button onClick={() => setDashTab('labs')} className={`flex-1 min-w-[120px] snap-start py-3 rounded-lg font-bold flex flex-col sm:flex-row items-center justify-center gap-1 sm:gap-2 transition text-sm sm:text-base ${dashTab === 'labs' ? 'bg-blue-50 text-blue-700' : 'text-slate-500 hover:bg-slate-50'}`}><FlaskConical size={18}/> Labs</button>
+                     <button onClick={() => setDashTab('growth')} className={`flex-1 min-w-[120px] snap-start py-3 rounded-lg font-bold flex flex-col sm:flex-row items-center justify-center gap-1 sm:gap-2 transition text-sm sm:text-base ${dashTab === 'growth' ? 'bg-orange-50 text-orange-700' : 'text-slate-500 hover:bg-slate-50'}`}><Ruler size={18}/> Vitals</button>
+                     <button onClick={() => setDashTab('vaccines')} className={`flex-1 min-w-[120px] snap-start py-3 rounded-lg font-bold flex flex-col sm:flex-row items-center justify-center gap-1 sm:gap-2 transition text-sm sm:text-base ${dashTab === 'vaccines' ? 'bg-indigo-50 text-indigo-700' : 'text-slate-500 hover:bg-slate-50'}`}><Syringe size={18}/> Vaccines</button>
+                     <button onClick={() => setDashTab('diseases')} className={`flex-1 min-w-[120px] snap-start py-3 rounded-lg font-bold flex flex-col sm:flex-row items-center justify-center gap-1 sm:gap-2 transition text-sm sm:text-base ${dashTab === 'diseases' ? 'bg-rose-50 text-rose-700' : 'text-slate-500 hover:bg-slate-50'}`}><Bug size={18}/> Screenings</button>
                   </div>
 
                   {dashTab === 'profile' && (
-                     <div className="grid grid-cols-3 gap-6">
-                        <div className="col-span-1 bg-white p-6 rounded-2xl shadow-sm border border-slate-100 h-fit">
+                     <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                        <div className="lg:col-span-1 bg-white p-6 rounded-2xl shadow-sm border border-slate-100 h-fit">
                             <h3 className="font-bold text-slate-800 text-lg mb-4 border-b pb-2">Personal Info</h3>
-                            <div className="space-y-4 text-sm">
+                            <div className="space-y-4 text-sm break-words">
                                 <div><p className="text-slate-400 font-bold uppercase text-xs">Full Name</p><p className="font-semibold text-slate-800">{activePatient}</p></div>
                                 <div><p className="text-slate-400 font-bold uppercase text-xs">Age</p><p className="font-semibold text-slate-800">{patientData.personal_info?.age || 'N/A'}</p></div>
                                 <div><p className="text-slate-400 font-bold uppercase text-xs">Biological Sex</p><p className="font-semibold text-slate-800">{patientData.personal_info?.gender || 'N/A'}</p></div>
@@ -571,8 +497,8 @@ export default function App() {
                             </div>
                         </div>
 
-                        <div className="col-span-2 bg-white p-6 rounded-2xl shadow-sm border border-slate-100">
-                            <div className="flex justify-between items-center mb-4 border-b pb-2">
+                        <div className="lg:col-span-2 bg-white p-6 rounded-2xl shadow-sm border border-slate-100">
+                            <div className="flex flex-wrap gap-2 justify-between items-center mb-4 border-b pb-2">
                                 <h3 className="font-bold text-slate-800 text-lg">Clinical Overview</h3>
                                 {user.role === 'Provider' && !isEditingProfile && (
                                     <button onClick={() => setIsEditingProfile(true)} className="flex items-center gap-1 text-sm text-blue-600 font-bold hover:underline"><Edit3 size={16}/> Edit Profile</button>
@@ -634,7 +560,7 @@ export default function App() {
                           
                           {patientData.visits && Object.keys(patientData.visits).length > 0 ? (
                               Object.values(patientData.visits).sort((a,b) => new Date(b.date) - new Date(a.date)).map((visit, idx) => (
-                                  <div key={idx} className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100">
+                                  <div key={idx} className="bg-white p-4 md:p-6 rounded-2xl shadow-sm border border-slate-100">
                                       <div className="flex justify-between items-center border-b pb-4 mb-4">
                                           <div>
                                               <h4 className="font-bold text-lg text-slate-800">Encounter: {visit.date}</h4>
@@ -642,7 +568,7 @@ export default function App() {
                                           </div>
                                       </div>
                                       
-                                      <div className="grid grid-cols-2 gap-6">
+                                      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                                           <div className="space-y-4">
                                               <div className="bg-emerald-50 p-4 rounded-xl border border-emerald-100">
                                                   <p className="text-xs font-bold text-emerald-700 uppercase mb-1">AI Visit Summary</p>
@@ -654,13 +580,13 @@ export default function App() {
                                                   <p className="text-xs font-bold text-slate-500 uppercase mb-2">Attached Documents</p>
                                                   <ul className="space-y-2">
                                                       {visit.documents.map((doc, i) => (
-                                                          <li key={i} className="flex items-center gap-2 text-sm text-slate-700 bg-slate-50 p-2 rounded border"><FileText size={14} className="text-slate-400"/> {doc}</li>
+                                                          <li key={i} className="flex items-center gap-2 text-sm text-slate-700 bg-slate-50 p-2 rounded border break-all"><FileText size={14} className="text-slate-400 shrink-0"/> {doc}</li>
                                                       ))}
                                                   </ul>
                                               </div>
                                           </div>
                                           
-                                          <div className="flex flex-col h-full">
+                                          <div className="flex flex-col h-full min-h-[200px]">
                                               <p className="text-xs font-bold text-slate-500 uppercase mb-2">Physician Encounter Note</p>
                                               <textarea 
                                                   value={visitNotes[visit.date] || ''} 
@@ -683,8 +609,8 @@ export default function App() {
                   )}
 
                   {dashTab === 'prescriptions' && (
-                     <div className="grid grid-cols-3 gap-6">
-                        <div className="col-span-2 bg-white rounded-2xl shadow-sm border border-slate-100 h-fit">
+                     <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                        <div className="lg:col-span-2 bg-white rounded-2xl shadow-sm border border-slate-100 h-fit">
                             <div className="bg-slate-50 px-6 py-4 border-b flex justify-between items-center">
                                 <h3 className="font-bold text-slate-800 text-lg flex items-center gap-2"><Pill className="text-cyan-600"/> Active Medications</h3>
                             </div>
@@ -693,9 +619,9 @@ export default function App() {
                                     <ul className="space-y-4">
                                         {patientData.prescriptions.map((rx, idx) => (
                                             <li key={idx} className="p-4 border rounded-xl bg-cyan-50 border-cyan-100">
-                                                <div className="flex justify-between items-start mb-2">
+                                                <div className="flex flex-col sm:flex-row justify-between sm:items-start mb-2 gap-2">
                                                     <h4 className="font-bold text-cyan-900 text-lg">{rx.medication}</h4>
-                                                    <span className="text-xs font-bold text-cyan-600 bg-white px-2 py-1 rounded border">Ordered: {rx.date}</span>
+                                                    <span className="text-xs font-bold text-cyan-600 bg-white px-2 py-1 rounded border w-fit">Ordered: {rx.date}</span>
                                                 </div>
                                                 <p className="text-sm font-semibold text-cyan-800 mb-1">Dosage: {rx.dosage}</p>
                                                 <p className="text-sm text-cyan-700 italic">"{rx.instructions}"</p>
@@ -706,7 +632,7 @@ export default function App() {
                             </div>
                         </div>
                         {user.role === 'Provider' && (
-                            <div className="col-span-1">
+                            <div className="lg:col-span-1">
                                 <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100">
                                     <h3 className="font-bold text-slate-800 mb-4 flex items-center gap-2"><Edit3 className="text-cyan-600" size={20}/> New Prescription</h3>
                                     <form onSubmit={handleAddPrescription} className="space-y-4">
@@ -722,8 +648,8 @@ export default function App() {
                   )}
 
                   {dashTab === 'orders' && (
-                     <div className="grid grid-cols-3 gap-6">
-                        <div className="col-span-2 bg-white rounded-2xl shadow-sm border border-slate-100 h-fit">
+                     <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                        <div className="lg:col-span-2 bg-white rounded-2xl shadow-sm border border-slate-100 h-fit">
                             <div className="bg-slate-50 px-6 py-4 border-b flex justify-between items-center">
                                 <h3 className="font-bold text-slate-800 text-lg flex items-center gap-2"><FileSignature className="text-pink-600"/> Lab & Imaging Orders</h3>
                             </div>
@@ -732,9 +658,9 @@ export default function App() {
                                     <ul className="space-y-4">
                                         {patientData.ordered_tests.map((order, idx) => (
                                             <li key={idx} className={`p-4 border rounded-xl ${order.status === 'Pending' ? 'bg-pink-50 border-pink-100' : 'bg-slate-50 border-slate-200'}`}>
-                                                <div className="flex justify-between items-start mb-2">
+                                                <div className="flex flex-col sm:flex-row justify-between sm:items-start mb-2 gap-2">
                                                     <h4 className={`font-bold text-lg ${order.status === 'Pending' ? 'text-pink-900' : 'text-slate-700 line-through'}`}>{order.test_name}</h4>
-                                                    <span className={`text-xs font-bold px-2 py-1 rounded border ${order.status === 'Pending' ? 'text-pink-600 bg-white border-pink-200' : 'text-emerald-600 bg-emerald-50 border-emerald-200'}`}>{order.status}</span>
+                                                    <span className={`text-xs font-bold px-2 py-1 rounded border w-fit ${order.status === 'Pending' ? 'text-pink-600 bg-white border-pink-200' : 'text-emerald-600 bg-emerald-50 border-emerald-200'}`}>{order.status}</span>
                                                 </div>
                                                 <p className={`text-sm italic ${order.status === 'Pending' ? 'text-pink-700' : 'text-slate-500'}`}>Reason: {order.reason}</p>
                                                 <p className="text-xs text-slate-400 mt-2">Ordered: {order.date}</p>
@@ -745,7 +671,7 @@ export default function App() {
                             </div>
                         </div>
                         {user.role === 'Provider' && (
-                            <div className="col-span-1">
+                            <div className="lg:col-span-1">
                                 <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100">
                                     <h3 className="font-bold text-slate-800 mb-4 flex items-center gap-2"><Edit3 className="text-pink-600" size={20}/> New Order</h3>
                                     <form onSubmit={handleAddOrder} className="space-y-4">
@@ -763,23 +689,25 @@ export default function App() {
                      <>
                        {Object.keys(patientData.categories || {}).length > 0 ? (
                          <>
-                           <div className="flex gap-2 border-b border-slate-200 pb-2 relative z-10">
+                           <div className="flex gap-2 border-b border-slate-200 pb-2 relative z-10 overflow-x-auto">
                                {Object.keys(patientData.categories || {}).map(category => (
                                    <button 
                                      key={category} 
                                      type="button"
                                      onClick={(e) => { e.preventDefault(); handleCategoryClick(category); }} 
-                                     className={`cursor-pointer px-6 py-2 rounded-t-lg font-bold transition-colors ${activeCategory === category ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}
+                                     className={`cursor-pointer px-4 md:px-6 py-2 rounded-t-lg font-bold transition-colors whitespace-nowrap ${activeCategory === category ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}
                                    >
                                      {category}
                                    </button>
                                ))}
                            </div>
                            {patientData.categories[activeCategory]?.length > 0 && (
-                               <div className="bg-white p-4 rounded-xl border border-slate-200 flex items-center gap-4 shadow-sm mt-4">
-                                   <ActivitySquare className="text-blue-600" size={24} />
-                                   <label className="font-bold text-slate-700">Select Lab Test:</label>
-                                   <select value={selectedTestName} onChange={(e) => setSelectedTestName(e.target.value)} className="p-3 border rounded-lg bg-slate-50 font-semibold min-w-[250px] cursor-pointer">
+                               <div className="bg-white p-4 rounded-xl border border-slate-200 flex flex-col sm:flex-row sm:items-center gap-4 shadow-sm mt-4">
+                                   <div className="flex items-center gap-2">
+                                     <ActivitySquare className="text-blue-600" size={24} />
+                                     <label className="font-bold text-slate-700">Select Lab Test:</label>
+                                   </div>
+                                   <select value={selectedTestName} onChange={(e) => setSelectedTestName(e.target.value)} className="p-3 border rounded-lg bg-slate-50 font-semibold w-full sm:w-auto min-w-[250px] cursor-pointer">
                                        {patientData.categories[activeCategory].map(test => (<option key={test.test_name} value={test.test_name}>{test.test_name}</option>))}
                                    </select>
                                </div>
@@ -791,15 +719,15 @@ export default function App() {
                                const sortedHistory = [...activeTest.history].sort((a, b) => new Date(a.Date) - new Date(b.Date));
 
                                return (
-                                   <div className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden mt-6">
-                                       <div className="bg-slate-50 px-6 py-4 border-b flex justify-between items-center">
+                                   <div className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden mt-6 flex flex-col">
+                                       <div className="bg-slate-50 px-4 md:px-6 py-4 border-b flex flex-col sm:flex-row justify-between sm:items-center gap-2">
                                            <h3 className="font-bold text-slate-800 text-lg">{activeTest.test_name} Trend Analysis</h3>
-                                           <span className="text-sm bg-white border px-4 py-1.5 rounded-full font-medium">Range: {activeTest.normal_min} - {activeTest.normal_max} {activeTest.unit}</span>
+                                           <span className="text-sm bg-white border px-4 py-1.5 rounded-full font-medium w-fit">Range: {activeTest.normal_min} - {activeTest.normal_max} {activeTest.unit}</span>
                                        </div>
-                                       <div className="grid grid-cols-2">
-                                           <div className="p-6 border-r h-80">
+                                       <div className="grid grid-cols-1 lg:grid-cols-2">
+                                           <div className="p-2 sm:p-6 border-b lg:border-b-0 lg:border-r h-[300px] lg:h-80">
                                                <ResponsiveContainer width="100%" height="100%">
-                                                 <LineChart data={sortedHistory}>
+                                                 <LineChart data={sortedHistory} margin={{ top: 10, right: 30, left: 0, bottom: 0 }}>
                                                    <CartesianGrid strokeDasharray="3 3" vertical={false} />
                                                    <XAxis dataKey="Date" tick={{fontSize: 12}} axisLine={false} tickLine={false} />
                                                    <YAxis domain={[0, 'auto']} tick={{fontSize: 12}} axisLine={false} tickLine={false} />
@@ -810,8 +738,8 @@ export default function App() {
                                                  </LineChart>
                                                </ResponsiveContainer>
                                            </div>
-                                           <div className="p-6 overflow-y-auto h-80">
-                                               <table className="w-full text-left">
+                                           <div className="p-4 sm:p-6 overflow-x-auto lg:overflow-y-auto h-auto lg:h-80">
+                                               <table className="w-full text-left min-w-[300px]">
                                                    <thead><tr><th className="pb-3 text-xs uppercase text-slate-400 border-b">Date</th><th className="pb-3 text-xs uppercase text-slate-400 border-b">Value & Trend</th><th className="pb-3 text-xs uppercase text-slate-400 border-b">Status</th></tr></thead>
                                                    <tbody>
                                                        {sortedHistory.map((record, i) => {
@@ -825,7 +753,7 @@ export default function App() {
                                                             <tr key={i} className="hover:bg-slate-50">
                                                                 <td className="py-3 text-sm font-medium border-b">{record.Date}</td>
                                                                 <td className="py-3 text-sm font-bold border-b">{record.Value} {activeTest.unit} {deltaHTML}</td>
-                                                                <td className="py-3 border-b"><span className={`text-xs px-2 py-1 rounded-full font-bold ${record.Status === 'Normal' ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-700'}`}>{record.Status}</span></td>
+                                                                <td className="py-3 border-b"><span className={`text-xs px-2 py-1 rounded-full font-bold whitespace-nowrap ${record.Status === 'Normal' ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-700'}`}>{record.Status}</span></td>
                                                             </tr>
                                                             );
                                                        })}
@@ -842,19 +770,19 @@ export default function App() {
                   )}
 
                   {dashTab === 'growth' && (
-                     <div className="grid grid-cols-3 gap-6">
-                        <div className="col-span-2 bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden flex flex-col h-[550px]">
-                            <div className="bg-slate-50 px-6 py-4 border-b border-slate-100 flex justify-between items-center">
-                                <h3 className="font-bold text-slate-800 text-lg flex items-center gap-2"><ActivitySquare className="text-orange-600"/> Height & Weight Trajectory</h3>
+                     <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                        <div className="lg:col-span-2 bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden flex flex-col h-[400px] lg:h-[550px]">
+                            <div className="bg-slate-50 px-4 md:px-6 py-4 border-b border-slate-100 flex justify-between items-center">
+                                <h3 className="font-bold text-slate-800 text-lg flex items-center gap-2"><ActivitySquare className="text-orange-600"/> Trajectory</h3>
                             </div>
-                            <div className="p-6 flex-grow">
+                            <div className="p-2 sm:p-6 flex-grow">
                                 {patientData.vitals && patientData.vitals.length > 0 ? (
                                     <ResponsiveContainer width="100%" height="100%">
-                                      <LineChart data={patientData.vitals}>
+                                      <LineChart data={patientData.vitals} margin={{ top: 10, right: 30, left: 0, bottom: 0 }}>
                                         <CartesianGrid strokeDasharray="3 3" vertical={false} />
                                         <XAxis dataKey="Date" tick={{fontSize: 12}} />
-                                        <YAxis yAxisId="left" orientation="left" label={{ value: 'Height (cm)', angle: -90, position: 'insideLeft', style: {textAnchor: 'middle'} }} />
-                                        <YAxis yAxisId="right" orientation="right" label={{ value: 'Weight (kg)', angle: 90, position: 'insideRight', style: {textAnchor: 'middle'} }} />
+                                        <YAxis yAxisId="left" orientation="left" label={{ value: 'Height', angle: -90, position: 'insideLeft', style: {textAnchor: 'middle'} }} />
+                                        <YAxis yAxisId="right" orientation="right" label={{ value: 'Weight', angle: 90, position: 'insideRight', style: {textAnchor: 'middle'} }} />
                                         <Tooltip contentStyle={{borderRadius: '8px'}} />
                                         <Legend verticalAlign="top" height={36}/>
                                         <Line yAxisId="left" type="monotone" dataKey="Height" stroke="#EA580C" strokeWidth={4} name="Height (cm)" />
@@ -865,7 +793,7 @@ export default function App() {
                             </div>
                         </div>
 
-                        <div className="col-span-1 space-y-6">
+                        <div className="lg:col-span-1 space-y-6">
                             <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100">
                                 <h3 className="font-bold text-slate-800 mb-4 flex items-center gap-2"><Scale className="text-orange-500" size={20}/> Log New Vitals</h3>
                                 <form onSubmit={handleLogVitals} className="space-y-4">
@@ -899,17 +827,17 @@ export default function App() {
                   )}
 
                   {dashTab === 'vaccines' && (
-                     <div className="bg-white p-8 rounded-2xl border">
+                     <div className="bg-white p-4 md:p-8 rounded-2xl border">
                         <h3 className="text-xl font-bold mb-6 flex items-center gap-2"><Syringe className="text-indigo-600"/> Immunization Record</h3>
                         {patientData.vaccines && patientData.vaccines.length > 0 ? (
-                            <div className="grid grid-cols-2 gap-4">
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                 {patientData.vaccines.map((vac, idx) => (
-                                    <div key={idx} className="p-5 border rounded-xl bg-slate-50 flex flex-col justify-between">
-                                        <div className="flex justify-between items-start mb-4">
+                                    <div key={idx} className="p-4 md:p-5 border rounded-xl bg-slate-50 flex flex-col justify-between">
+                                        <div className="flex justify-between items-start mb-4 gap-2">
                                             <h4 className="font-bold text-lg">{vac.name}</h4>
-                                            <span className={`text-xs font-bold px-3 py-1 rounded-full ${vac.status === 'Valid' ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-700'}`}>{vac.status}</span>
+                                            <span className={`text-xs font-bold px-3 py-1 rounded-full whitespace-nowrap ${vac.status === 'Valid' ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-700'}`}>{vac.status}</span>
                                         </div>
-                                        <div className="flex justify-between text-sm text-slate-600"><span><strong>Given:</strong> {vac.date_administered}</span><span><strong>Expires:</strong> {vac.expiration_date}</span></div>
+                                        <div className="flex flex-col sm:flex-row sm:justify-between text-sm text-slate-600 gap-1"><span><strong>Given:</strong> {vac.date_administered}</span><span><strong>Expires:</strong> {vac.expiration_date}</span></div>
                                     </div>
                                 ))}
                             </div>
@@ -918,10 +846,10 @@ export default function App() {
                   )}
 
                   {dashTab === 'diseases' && (
-                     <div className="bg-white p-8 rounded-2xl border">
+                     <div className="bg-white p-4 md:p-8 rounded-2xl border overflow-x-auto">
                         <h3 className="text-xl font-bold mb-6 flex items-center gap-2"><Bug className="text-rose-600"/> Disease Screenings</h3>
                         {patientData.diseases && patientData.diseases.length > 0 ? (
-                            <table className="w-full text-left">
+                            <table className="w-full text-left min-w-[400px]">
                                 <thead className="bg-slate-50"><tr><th className="p-4">Condition</th><th className="p-4">Date Tested</th><th className="p-4">Result</th></tr></thead>
                                 <tbody>
                                     {patientData.diseases.map((dis, idx) => (
@@ -939,10 +867,11 @@ export default function App() {
 
               {view === 'upload' && activePatient && (
                 <div className="space-y-6">
-                  <div className="bg-white p-12 rounded-2xl shadow-sm border border-slate-100 text-center">
+                  <div className="bg-white p-8 md:p-12 rounded-2xl shadow-sm border border-slate-100 text-center">
                     <div className="w-20 h-20 bg-blue-50 rounded-full flex items-center justify-center mx-auto mb-6"><Upload size={32} className="text-blue-600" /></div>
-                    <h3 className="text-xl font-bold mb-2">Upload to {activePatient}'s Chart</h3>
-                    <label className="cursor-pointer bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-6 rounded-xl inline-block mt-4">
+                    <h3 className="text-xl font-bold mb-2">Upload to Chart</h3>
+                    <p className="text-slate-500 mb-4">{activePatient}</p>
+                    <label className="cursor-pointer bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-6 rounded-xl inline-block mt-2">
                       <span>Browse File</span><input type="file" onChange={handleFileUpload} className="hidden" />
                     </label>
                   </div>
@@ -955,8 +884,8 @@ export default function App() {
 
       {/* SMART SCANNING LOADING OVERLAY */}
       {isScanning && (
-        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-[99999] flex flex-col justify-center items-center text-white">
-          <div className="bg-white p-8 rounded-2xl shadow-2xl flex flex-col items-center max-w-sm text-center border border-slate-100">
+        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-[99999] flex flex-col justify-center items-center text-white px-4">
+          <div className="bg-white p-8 rounded-2xl shadow-2xl flex flex-col items-center max-w-sm w-full text-center border border-slate-100">
             <Activity className="text-blue-600 animate-pulse mb-4 animate-spin" size={48} />
             <h3 className="text-slate-900 font-bold text-lg mb-1">AI Smart Scanning Active</h3>
             <p className="text-slate-500 text-sm">Reading the document layout to auto-detect the patient's identity...</p>

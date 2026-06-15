@@ -1,14 +1,16 @@
 {
   "id": "com.clinicalportal.app",
-  "short_name": "ClinicalPortal",
-  "name": "Clinical Portal Master Dashboard",
-  "description": "A secure master clinical dashboard for tracking patient health records, lab results, and medical encounters.",
-  "orientation": "any",
-  "categories": ["medical", "health", "productivity"],
+  "name": "Clinical Portal",
+  "short_name": "CliniPort",
+  "description": "A secure master clinical dashboard for tracking patient health records, lab results, and medical encounters, purely from image or file uploads.",
+  "dir": "ltr",
+  "scope": "/",
   "start_url": "/",
   "display": "standalone",
-  "theme_color": "#000000",
-  "background_color": "#ffffff",
+  "orientation": "any",
+  "categories": ["medical", "health", "productivity"],
+  "theme_color": "#16c4e8",
+  "background_color": "#2e45f0",
   "icons": [
     {
       "src": "/logo192.png",

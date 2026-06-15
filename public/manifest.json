@@ -8,9 +8,17 @@
   "scope": "/",
   "start_url": "/",
   "display": "standalone",
-  "display_override": ["standalone", "minimal-ui", "browser"],
+  "display_override": [
+    "standalone",
+    "minimal-ui",
+    "browser"
+  ],
   "orientation": "any",
-  "categories": ["medical", "health", "productivity"],
+  "categories": [
+    "medical",
+    "health",
+    "productivity"
+  ],
   "prefer_related_applications": true,
   "related_applications": [
     {
@@ -55,12 +63,32 @@
       "form_factor": "narrow"
     }
   ],
+  "shortcuts": [
+    {
+      "name": "New Patient Upload",
+      "short_name": "Upload",
+      "description": "Quickly upload a new PDF or scan",
+      "url": "/",
+      "icons": [
+        {
+          "src": "/logo192.png",
+          "sizes": "192x192"
+        }
+      ]
+    }
+  ],
   "file_handlers": [
     {
       "action": "/",
       "accept": {
-        "application/pdf": [".pdf"],
-        "image/*": [".jpg", ".jpeg", ".png"]
+        "application/pdf": [
+          ".pdf"
+        ],
+        "image/*": [
+          ".jpg",
+          ".jpeg",
+          ".png"
+        ]
       }
     }
   ],
@@ -75,7 +103,10 @@
       "files": [
         {
           "name": "file",
-          "accept": ["application/pdf", "image/*"]
+          "accept": [
+            "application/pdf",
+            "image/*"
+          ]
         }
       ]
     }

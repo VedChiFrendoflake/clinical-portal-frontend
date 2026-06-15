@@ -3,6 +3,7 @@
   "name": "Clinical Portal",
   "short_name": "CliniPort",
   "description": "A secure master clinical dashboard for tracking patient health records, lab results, and medical encounters.",
+  "lang": "en",
   "dir": "ltr",
   "scope": "/",
   "start_url": "/",
@@ -19,6 +20,11 @@
     }
   ],
   "iarc_rating_id": "e84b072d-71b3-4d3e-86ae-31a8ce4e53b7",
+  "scope_extensions": [
+    {
+      "origin": "*.up.railway.app"
+    }
+  ],
   "theme_color": "#16c4e8",
   "background_color": "#2e45f0",
   "icons": [

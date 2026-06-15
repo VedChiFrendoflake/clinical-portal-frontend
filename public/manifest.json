@@ -2,11 +2,12 @@
   "id": "com.clinicalportal.app",
   "name": "Clinical Portal",
   "short_name": "CliniPort",
-  "description": "A secure master clinical dashboard for tracking patient health records, lab results, and medical encounters, purely from image or file uploads.",
+  "description": "A secure master clinical dashboard for tracking patient health records, lab results, and medical encounters.",
   "dir": "ltr",
   "scope": "/",
   "start_url": "/",
   "display": "standalone",
+  "display_override": ["standalone", "minimal-ui", "browser"],
   "orientation": "any",
   "categories": ["medical", "health", "productivity"],
   "prefer_related_applications": true,
@@ -17,6 +18,7 @@
       "id": "com.clinicalportal.app"
     }
   ],
+  "iarc_rating_id": "e84b072d-71b3-4d3e-86ae-31a8ce4e53b7",
   "theme_color": "#16c4e8",
   "background_color": "#2e45f0",
   "icons": [

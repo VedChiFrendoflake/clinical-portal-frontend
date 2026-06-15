@@ -3,6 +3,11 @@
   "short_name": "ClinicalPortal",
   "name": "Clinical Portal Master Dashboard",
   "description": "A secure master clinical dashboard for tracking patient health records, lab results, and medical encounters.",
+  "orientation": "any",
+  "start_url": "/",
+  "display": "standalone",
+  "theme_color": "#000000",
+  "background_color": "#ffffff",
   "icons": [
     {
       "src": "/logo192.png",
@@ -31,10 +36,6 @@
       "form_factor": "narrow"
     }
   ],
-  "start_url": "/",
-  "display": "standalone",
-  "theme_color": "#000000",
-  "background_color": "#ffffff",
   "file_handlers": [
     {
       "action": "/",

@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import Tesseract from 'tesseract.js';
 
 export default function DocumentDashboard() {
@@ -9,6 +9,34 @@ export default function DocumentDashboard() {
   const [isProcessing, setIsProcessing] = useState(false);
 
   const fileInputRef = useRef(null);
+
+  // --- 🌟 NEW: CHECK FOR ANDROID SHARED FILES ON LOAD ---
+  useEffect(() => {
+    const checkSharedFiles = async () => {
+      try {
+        const cache = await caches.open('shared-files-cache');
+        const response = await cache.match('/latest-shared-file');
+        
+        if (response) {
+          // 1. We found a file! Grab the data and the filename
+          const blob = await response.blob();
+          const filename = response.headers.get('X-File-Name') || 'Shared_Document';
+          const file = new File([blob], filename, { type: blob.type });
+
+          // 2. Send it directly into your Smart Router to be processed
+          processFile(file);
+
+          // 3. Delete it from the cache so we don't accidentally process it again tomorrow
+          await cache.delete('/latest-shared-file');
+        }
+      } catch (err) {
+        console.error("Failed to check shared files:", err);
+      }
+    };
+
+    checkSharedFiles();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // --- THE SMART ROUTER ---
   const processFile = async (file) => {

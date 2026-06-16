@@ -98,22 +98,32 @@ export default function App() {
     }
   }, [patientData]);
 
-  // --- SMART DETECTION FOR FORWARDED TEXT STRINGS OR IMAGES FROM SHARE MENU ---
+  // --- 🌟 FIXED: SMART DETECTION FOR SHARED FILES ---
   useEffect(() => {
+    // CRITICAL: Do absolutely nothing until the user is actually logged in!
+    if (!user) return; 
+
     const urlParams = new URLSearchParams(window.location.search);
     if (urlParams.get('incoming_share') === 'true') {
       (async () => {
-        const cache = await caches.open('incoming-shares');
-        const target = user?.role === 'Patient' ? user.real_name : activePatient;
+        // Use the exact same cache name as your sw.js
+        const cache = await caches.open('shared-files-cache'); 
+        
+        // Let's figure out who the target patient is
+        const target = user.role === 'Patient' ? user.real_name : activePatient;
 
-        const cachedFile = await cache.match('shared-file');
+        // 1. Check for Shared Files (PDFs/Images)
+        const cachedFile = await cache.match('/latest-shared-file');
         if (cachedFile) {
           const blob = await cachedFile.blob();
-          const file = new File([blob], "shared_document.pdf", { type: blob.type });
+          const filename = cachedFile.headers.get('X-File-Name') || 'shared_document.pdf';
+          const file = new File([blob], filename, { type: blob.type });
           
-          if (target) {
+          if (target && target !== '') {
+            // Auto-upload it to the active chart!
             processDocumentUpload(file, target);
           } else {
+            // If they are a provider but haven't picked a patient yet, use the Smart Scanner
             setIsScanning(true);
             const formData = new FormData();
             formData.append('file', file);
@@ -126,20 +136,21 @@ export default function App() {
                 const confirmAutoFile = window.confirm(`Smart Scan Results:\n\nWe detected this document belongs to "${data.matched_patient}".\n\nWould you like to automatically upload it to their chart?`);
                 if (confirmAutoFile) processDocumentUpload(file, data.matched_patient);
               } else {
-                alert("Smart Scan couldn't confidently read a patient name. Please log in and select the patient chart manually.");
+                alert("Smart Scan couldn't confidently read a patient name. Please select the patient chart manually and upload it from the dashboard.");
               }
             } catch (err) {
               setIsScanning(false);
-              alert("Image document received! Please log in and pick a patient chart profile manually to file it.");
+              alert("Image received! Please select a patient chart profile manually to file it.");
             }
           }
-          await cache.delete('shared-file'); 
+          await cache.delete('/latest-shared-file'); // Clear it so it doesn't upload again tomorrow
         }
 
-        const cachedText = await cache.match('shared-text');
+        // 2. Check for Shared Text Messages
+        const cachedText = await cache.match('/latest-shared-text');
         if (cachedText) {
           const sharedTextString = await cachedText.text();
-          if (target) {
+          if (target && target !== '') {
             try {
               const dateStr = new Date().toISOString().split('T')[0];
               await fetch(`${BACKEND_URL}/api/visit/note`, {
@@ -152,11 +163,14 @@ export default function App() {
           } else {
             alert(`Text snippet received via Share Menu:\n\n"${sharedTextString}"\n\nPlease select a patient chart profile first to save this message data.`);
           }
-          await cache.delete('shared-text'); 
+          await cache.delete('/latest-shared-text'); 
         }
+
+        // Clean up the URL so it doesn't keep triggering on every refresh
+        window.history.replaceState({}, document.title, "/");
       })();
     }
-  }, [user, activePatient]);
+  }, [user, activePatient]); // This tells React to re-run this check whenever the user logs in!
 
   // 🌟 ANDROID PWA "OPEN WITH" FILE INTERCEPTOR
   useEffect(() => {
@@ -491,7 +505,7 @@ export default function App() {
                       <input type="text" placeholder="Street Address" className="w-full p-3 border border-slate-200 rounded-lg bg-slate-50 focus:ring-2 focus:ring-emerald-500 outline-none" value={regStreet} onChange={e => setRegStreet(e.target.value)} />
                       <div className="flex flex-col sm:flex-row gap-2">
                           <input type="text" placeholder="State/Province" className="w-full sm:w-1/2 p-3 border border-slate-200 rounded-lg bg-slate-50 focus:ring-2 focus:ring-emerald-500 outline-none" value={regState} onChange={e => setRegState(e.target.value)} />
-                          <input type="text" placeholder="Country" className="w-full sm:w-1/2 p-3 border border-slate-200 rounded-lg bg-slate-50 focus:ring-2 focus:ring-emerald-500 outline-none" value={regCountry} onChange={e => setRegCountry(e.target.value)} />
+                          <input type="text" placeholder="Country" className="w-full sm:w-1/2 p-3 border border-slate-200 rounded-lg bg-slate-50 focus:ring-2 focus:ring-emerald-500 outline-none" value={regCountry} onChange={e => setCountry(e.target.value)} />
                       </div>
                     </div>
                   )}

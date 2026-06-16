@@ -1,20 +1,15 @@
 <!DOCTYPE html>
 <html lang="en">
   <head>
-    <meta charset="UTF-8" />
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=0" />
+    <meta name="theme-color" content="#16c4e8" />
+    <meta name="description" content="Secure master clinical dashboard for tracking patient health records." />
     
-    <link rel="manifest" href="/manifest.json">
-
-
-    <link rel="icon" type="image/x-icon" href="/favicon.ico" />
+    <link rel="manifest" href="/manifest.json" />
+    <link rel="icon" href="/logo192.png" />
     <link rel="apple-touch-icon" href="/logo192.png" />
-
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
     
-    <meta name="theme-color" content="#ffffff" />
-    
-    <meta name="description" content="A secure master clinical dashboard for tracking patient health records, lab results, and medical encounters." />
-
     <title>Clinical Portal</title>
   </head>
   <body>
@@ -22,11 +17,18 @@
     
     <div id="root"></div>
 
-    <script type="module" src="/src/main.jsx"></script>
+    <script type="module" src="/src/index.js"></script>
+
     <script>
       if ('serviceWorker' in navigator) {
         window.addEventListener('load', () => {
-          navigator.serviceWorker.register('/sw.js');
+          navigator.serviceWorker.register('/sw.js')
+            .then(registration => {
+              console.log('ServiceWorker registration successful with scope: ', registration.scope);
+            })
+            .catch(err => {
+              console.error('ServiceWorker registration failed: ', err);
+            });
         });
       }
     </script>

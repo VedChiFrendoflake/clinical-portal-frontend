@@ -10,31 +10,38 @@ export default function DocumentDashboard() {
 
   const fileInputRef = useRef(null);
 
-  // --- 🌟 NEW: CHECK FOR ANDROID SHARED FILES ON LOAD ---
+  // --- 🌟 CATCH BOTH 'SHARE' AND 'OPEN WITH' FILES ---
   useEffect(() => {
+    // 1. CATCH "SHARE" FILES (From the Service Worker cache)
     const checkSharedFiles = async () => {
       try {
         const cache = await caches.open('shared-files-cache');
         const response = await cache.match('/latest-shared-file');
         
         if (response) {
-          // 1. We found a file! Grab the data and the filename
           const blob = await response.blob();
           const filename = response.headers.get('X-File-Name') || 'Shared_Document';
           const file = new File([blob], filename, { type: blob.type });
-
-          // 2. Send it directly into your Smart Router to be processed
           processFile(file);
-
-          // 3. Delete it from the cache so we don't accidentally process it again tomorrow
           await cache.delete('/latest-shared-file');
         }
       } catch (err) {
         console.error("Failed to check shared files:", err);
       }
     };
-
     checkSharedFiles();
+
+    // 2. CATCH "OPEN WITH" FILES (From the File Handling API)
+    if ('launchQueue' in window) {
+      window.launchQueue.setConsumer(async (launchParams) => {
+        if (launchParams.files && launchParams.files.length > 0) {
+          // Grab the exact file the user tapped on in their files app
+          const fileHandle = launchParams.files[0];
+          const file = await fileHandle.getFile();
+          processFile(file);
+        }
+      });
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 

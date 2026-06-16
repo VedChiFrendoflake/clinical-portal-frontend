@@ -6,11 +6,14 @@ import { Activity, Upload, User, ShieldCheck, UserPlus, Search, Users, CheckCirc
 const BACKEND_URL = "https://clinical-portal-backend-production.up.railway.app";
 
 export default function App() {
+  // --- SPLASH SCREEN STATE ---
+  const [splashState, setSplashState] = useState('visible'); // 'visible', 'fading', or 'hidden'
+
   const [user, setUser] = useState(null);
   const [view, setView] = useState('login'); 
   const [textSize, setTextSize] = useState('normal'); 
   const [authError, setAuthError] = useState(''); 
-  const [isLoading, setIsLoading] = useState(false); // NEW: Controls the cosmetic loading spinners
+  const [isLoading, setIsLoading] = useState(false); 
   
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
@@ -44,6 +47,20 @@ export default function App() {
   const [orderInput, setOrderInput] = useState({ test_name: '', reason: '' });
 
   const [isScanning, setIsScanning] = useState(false);
+
+  // --- SPLASH SCREEN TIMERS ---
+  useEffect(() => {
+    const fadeTimer = setTimeout(() => {
+      setSplashState('fading');
+    }, 2000);
+    const hideTimer = setTimeout(() => {
+      setSplashState('hidden');
+    }, 2500);
+    return () => {
+      clearTimeout(fadeTimer);
+      clearTimeout(hideTimer);
+    };
+  }, []);
 
   // --- GOOGLE TRANSLATE WITH AUTO-DETECT ---
   useEffect(() => {
@@ -169,7 +186,6 @@ export default function App() {
     }
   }, [user, activePatient]);
 
-  // --- UPDATED LOGIN HANDLER WITH LOADING ANIMATION ---
   const handleLogin = async (e) => {
     e.preventDefault();
     setAuthError('');
@@ -182,7 +198,6 @@ export default function App() {
       if (!res.ok) throw new Error("Invalid username or password.");
       const data = await res.json();
       
-      // Simulate secure connection transition for visual flair
       setTimeout(() => {
         setIsLoading(false);
         setUser(data);
@@ -198,7 +213,6 @@ export default function App() {
     }
   };
 
-  // --- UPDATED REGISTER HANDLER WITH LOADING ANIMATION ---
   const handleRegister = async (e) => {
     e.preventDefault();
     setAuthError('');
@@ -362,11 +376,34 @@ export default function App() {
   return (
     <div className={`min-h-screen bg-slate-50 text-slate-800 font-sans ${textClass}`}>
       
+      {/* --- 💧 ACTUAL LIQUID SPLASH ANIMATION --- */}
+      <style>{`
+        @keyframes dropIn {
+          0% { transform: translateY(-100vh) scaleY(1.5); opacity: 0; }
+          60% { opacity: 1; }
+          100% { transform: translateY(0) scale(1); opacity: 1; }
+        }
+        @keyframes splashOut {
+          0% { transform: scale(0); opacity: 0.8; }
+          100% { transform: scale(25); opacity: 0; display: none; }
+        }
+        .liquid-drop { animation: dropIn 0.6s cubic-bezier(0.25, 1, 0.5, 1) forwards; }
+        .liquid-ripple-1 { animation: splashOut 1.2s cubic-bezier(0.1, 0.8, 0.3, 1) forwards; animation-delay: 0.5s; }
+        .liquid-ripple-2 { animation: splashOut 1.2s cubic-bezier(0.1, 0.8, 0.3, 1) forwards; animation-delay: 0.65s; }
+      `}</style>
+
+      {splashState !== 'hidden' && (
+        <div className={`fixed inset-0 z-[99999] flex items-center justify-center bg-blue-50 transition-opacity duration-700 ${splashState === 'fading' ? 'opacity-0 pointer-events-none' : 'opacity-100'}`}>
+          <div className="absolute w-8 h-12 bg-blue-500 rounded-[50%_50%_50%_50%/60%_60%_40%_40%] liquid-drop shadow-xl"></div>
+          <div className="absolute w-24 h-24 border-8 border-blue-400 rounded-full opacity-0 liquid-ripple-1"></div>
+          <div className="absolute w-24 h-24 bg-blue-300 rounded-full opacity-0 liquid-ripple-2"></div>
+        </div>
+      )}
+
       {/* FLOATING GOOGLE TRANSLATE WIDGET */}
       <div id="google_translate_element" className="fixed bottom-6 right-6 z-[9999] shadow-2xl rounded-lg overflow-hidden border border-slate-200 bg-white p-1"></div>
 
       {!user ? (
-        // 🌟 NEW COSMETIC LOGIN/REGISTER UI INJECTED HERE
         <div className="flex flex-col justify-center items-center py-12 px-4 min-h-screen bg-gradient-to-br from-blue-50 to-cyan-100">
           <div className="bg-white p-8 md:p-10 rounded-2xl shadow-xl w-full max-w-lg border border-slate-100 animate-in fade-in slide-in-from-bottom-8 duration-700">
             {view === 'login' ? (
@@ -454,7 +491,7 @@ export default function App() {
                       <input type="text" placeholder="Street Address" className="w-full p-3 border border-slate-200 rounded-lg bg-slate-50 focus:ring-2 focus:ring-emerald-500 outline-none" value={regStreet} onChange={e => setRegStreet(e.target.value)} />
                       <div className="flex flex-col sm:flex-row gap-2">
                           <input type="text" placeholder="State/Province" className="w-full sm:w-1/2 p-3 border border-slate-200 rounded-lg bg-slate-50 focus:ring-2 focus:ring-emerald-500 outline-none" value={regState} onChange={e => setRegState(e.target.value)} />
-                          <input type="text" placeholder="Country" className="w-full sm:w-1/2 p-3 border border-slate-200 rounded-lg bg-slate-50 focus:ring-2 focus:ring-emerald-500 outline-none" value={regCountry} onChange={e => setCountry(e.target.value)} />
+                          <input type="text" placeholder="Country" className="w-full sm:w-1/2 p-3 border border-slate-200 rounded-lg bg-slate-50 focus:ring-2 focus:ring-emerald-500 outline-none" value={regCountry} onChange={e => setRegCountry(e.target.value)} />
                       </div>
                     </div>
                   )}

@@ -10,6 +10,7 @@ export default function App() {
   const [view, setView] = useState('login'); 
   const [textSize, setTextSize] = useState('normal'); 
   const [authError, setAuthError] = useState(''); 
+  const [isLoading, setIsLoading] = useState(false); // NEW: Controls the cosmetic loading spinners
   
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
@@ -168,9 +169,11 @@ export default function App() {
     }
   }, [user, activePatient]);
 
+  // --- UPDATED LOGIN HANDLER WITH LOADING ANIMATION ---
   const handleLogin = async (e) => {
     e.preventDefault();
     setAuthError('');
+    setIsLoading(true);
     try {
       const res = await fetch(`${BACKEND_URL}/api/login`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -178,19 +181,28 @@ export default function App() {
       });
       if (!res.ok) throw new Error("Invalid username or password.");
       const data = await res.json();
-      setUser(data);
-      if (data.role === 'Patient') {
-        setActivePatient(data.real_name); fetchPatientData(data.real_name); setView('dashboard');
-      } else { setView('provider_search'); }
+      
+      // Simulate secure connection transition for visual flair
+      setTimeout(() => {
+        setIsLoading(false);
+        setUser(data);
+        if (data.role === 'Patient') {
+          setActivePatient(data.real_name); fetchPatientData(data.real_name); setView('dashboard');
+        } else { setView('provider_search'); }
+      }, 800);
+
     } catch (err) { 
+      setIsLoading(false);
       if (err.message === "Failed to fetch") setAuthError("Cannot connect to cloud server. Check your Railway backend status.");
       else setAuthError(err.message);
     }
   };
 
+  // --- UPDATED REGISTER HANDLER WITH LOADING ANIMATION ---
   const handleRegister = async (e) => {
     e.preventDefault();
     setAuthError('');
+    setIsLoading(true);
     try {
       const res = await fetch(`${BACKEND_URL}/api/register`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -206,8 +218,14 @@ export default function App() {
         })
       });
       if (!res.ok) throw new Error("Username already exists.");
-      alert("Account created!"); setView('login'); setPassword('');
+      
+      setTimeout(() => {
+        setIsLoading(false);
+        alert("Account created!"); setView('login'); setPassword('');
+      }, 800);
+
     } catch (err) { 
+      setIsLoading(false);
       if (err.message === "Failed to fetch") setAuthError("Cannot connect to cloud server. Check your Railway backend status.");
       else setAuthError(err.message);
     }
@@ -348,33 +366,64 @@ export default function App() {
       <div id="google_translate_element" className="fixed bottom-6 right-6 z-[9999] shadow-2xl rounded-lg overflow-hidden border border-slate-200 bg-white p-1"></div>
 
       {!user ? (
-        <div className="flex flex-col justify-center items-center py-12 px-4 min-h-screen">
-          <div className="bg-white p-8 md:p-10 rounded-2xl shadow-xl w-full max-w-lg border border-slate-100">
+        // 🌟 NEW COSMETIC LOGIN/REGISTER UI INJECTED HERE
+        <div className="flex flex-col justify-center items-center py-12 px-4 min-h-screen bg-gradient-to-br from-blue-50 to-cyan-100">
+          <div className="bg-white p-8 md:p-10 rounded-2xl shadow-xl w-full max-w-lg border border-slate-100 animate-in fade-in slide-in-from-bottom-8 duration-700">
             {view === 'login' ? (
               <>
-                <div className="flex justify-center mb-6"><ShieldCheck size={56} className="text-blue-600" /></div>
-                <h2 className="text-2xl font-bold text-center text-slate-800 mb-8">Clinical Portal</h2>
+                <div className="flex justify-center mb-6">
+                  <div className="inline-flex items-center justify-center w-16 h-16 bg-blue-600 rounded-full shadow-lg">
+                    <ShieldCheck size={32} className="text-white" />
+                  </div>
+                </div>
+                <h2 className="text-2xl font-bold text-center text-slate-800 mb-2">Clinical Portal</h2>
+                <p className="text-center text-slate-500 mb-8">Secure Provider Access</p>
                 
                 {authError && (
                   <div className="bg-red-50 text-red-600 p-3 rounded-lg text-sm font-bold mb-6 border border-red-100 text-center">{authError}</div>
                 )}
 
                 <form onSubmit={handleLogin} className="space-y-5">
-                  <input 
-                    type="text" id="login-username" name="username" autoComplete="username" placeholder="Username" 
-                    className="w-full p-3 border rounded-lg bg-slate-50" value={username} onChange={e => setUsername(e.target.value)} 
-                  />
-                  <input 
-                    type="password" id="login-password" name="password" autoComplete="current-password" placeholder="Password" 
-                    className="w-full p-3 border rounded-lg bg-slate-50" value={password} onChange={e => setPassword(e.target.value)} 
-                  />
-                  <button type="submit" className="w-full bg-blue-600 text-white font-bold py-3 rounded-lg hover:bg-blue-700">Secure Login</button>
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 mb-1">Username</label>
+                    <input 
+                      type="text" id="login-username" name="username" autoComplete="username" placeholder="Enter username" 
+                      className="w-full p-3 border border-slate-200 rounded-lg bg-slate-50 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all" 
+                      value={username} onChange={e => setUsername(e.target.value)} 
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 mb-1">Passcode</label>
+                    <input 
+                      type="password" id="login-password" name="password" autoComplete="current-password" placeholder="Enter passcode" 
+                      className="w-full p-3 border border-slate-200 rounded-lg bg-slate-50 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all" 
+                      value={password} onChange={e => setPassword(e.target.value)} 
+                    />
+                  </div>
+                  <button 
+                    type="submit" 
+                    disabled={isLoading}
+                    className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-4 rounded-lg transition-all flex items-center justify-center h-12 shadow-md hover:shadow-lg mt-2"
+                  >
+                    {isLoading ? (
+                      <svg className="animate-spin h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                      </svg>
+                    ) : (
+                      "Secure Login"
+                    )}
+                  </button>
                 </form>
                 <p className="text-center text-sm text-slate-500 mt-6">Don't have an account? <button type="button" onClick={() => {setView('register'); setAuthError('');}} className="text-blue-600 font-bold hover:underline">Sign up</button></p>
               </>
             ) : (
               <>
-                <div className="flex justify-center mb-6"><UserPlus size={56} className="text-emerald-600" /></div>
+                <div className="flex justify-center mb-6">
+                  <div className="inline-flex items-center justify-center w-16 h-16 bg-emerald-600 rounded-full shadow-lg">
+                    <UserPlus size={32} className="text-white" />
+                  </div>
+                </div>
                 <h2 className="text-2xl font-bold text-center text-slate-800 mb-8">Create Account</h2>
                 
                 {authError && (
@@ -382,43 +431,56 @@ export default function App() {
                 )}
 
                 <form onSubmit={handleRegister} className="space-y-4">
-                  <input type="text" placeholder="Full Legal Name" required className="w-full p-3 border rounded-lg bg-slate-50" value={regName} onChange={e => setRegName(e.target.value)} />
-                  <select className="w-full p-3 border rounded-lg bg-slate-50 text-slate-700 font-semibold" value={regRole} onChange={e => setRegRole(e.target.value)}>
+                  <input type="text" placeholder="Full Legal Name" required className="w-full p-3 border border-slate-200 rounded-lg bg-slate-50 focus:ring-2 focus:ring-emerald-500 outline-none transition-all" value={regName} onChange={e => setRegName(e.target.value)} />
+                  <select className="w-full p-3 border border-slate-200 rounded-lg bg-slate-50 text-slate-700 font-semibold focus:ring-2 focus:ring-emerald-500 outline-none transition-all" value={regRole} onChange={e => setRegRole(e.target.value)}>
                     <option value="Patient">I am a Patient</option>
                     <option value="Provider">Medical Provider</option>
                   </select>
                   
                   {regRole === 'Patient' && (
-                    <>
+                    <div className="animate-in fade-in slide-in-from-top-2 duration-300 space-y-4">
                       <div className="flex flex-col sm:flex-row gap-2">
-                          <input type="number" placeholder="Age" required className="w-full sm:w-1/3 p-3 border rounded-lg bg-slate-50" value={regAge} onChange={e => setRegAge(e.target.value)} />
-                          <select className="w-full sm:w-2/3 p-3 border rounded-lg bg-slate-50" value={regGender} onChange={e => setRegGender(e.target.value)}>
+                          <input type="number" placeholder="Age" required className="w-full sm:w-1/3 p-3 border border-slate-200 rounded-lg bg-slate-50 focus:ring-2 focus:ring-emerald-500 outline-none" value={regAge} onChange={e => setRegAge(e.target.value)} />
+                          <select className="w-full sm:w-2/3 p-3 border border-slate-200 rounded-lg bg-slate-50 focus:ring-2 focus:ring-emerald-500 outline-none" value={regGender} onChange={e => setRegGender(e.target.value)}>
                               <option value="Male">Male</option>
                               <option value="Female">Female</option>
                               <option value="Other">Other</option>
                           </select>
                       </div>
                       <div className="flex flex-col sm:flex-row gap-2">
-                          <input type="email" placeholder="Email" required className="w-full sm:w-1/2 p-3 border rounded-lg bg-slate-50" value={regEmail} onChange={e => setRegEmail(e.target.value)} />
-                          <input type="tel" placeholder="Phone" required className="w-full sm:w-1/2 p-3 border rounded-lg bg-slate-50" value={regPhone} onChange={e => setRegPhone(e.target.value)} />
+                          <input type="email" placeholder="Email" required className="w-full sm:w-1/2 p-3 border border-slate-200 rounded-lg bg-slate-50 focus:ring-2 focus:ring-emerald-500 outline-none" value={regEmail} onChange={e => setRegEmail(e.target.value)} />
+                          <input type="tel" placeholder="Phone" required className="w-full sm:w-1/2 p-3 border border-slate-200 rounded-lg bg-slate-50 focus:ring-2 focus:ring-emerald-500 outline-none" value={regPhone} onChange={e => setRegPhone(e.target.value)} />
                       </div>
-                      <input type="text" placeholder="Street Address" className="w-full p-3 border rounded-lg bg-slate-50" value={regStreet} onChange={e => setRegStreet(e.target.value)} />
+                      <input type="text" placeholder="Street Address" className="w-full p-3 border border-slate-200 rounded-lg bg-slate-50 focus:ring-2 focus:ring-emerald-500 outline-none" value={regStreet} onChange={e => setRegStreet(e.target.value)} />
                       <div className="flex flex-col sm:flex-row gap-2">
-                          <input type="text" placeholder="State/Province" className="w-full sm:w-1/2 p-3 border rounded-lg bg-slate-50" value={regState} onChange={e => setRegState(e.target.value)} />
-                          <input type="text" placeholder="Country" className="w-full sm:w-1/2 p-3 border rounded-lg bg-slate-50" value={regCountry} onChange={e => setRegCountry(e.target.value)} />
+                          <input type="text" placeholder="State/Province" className="w-full sm:w-1/2 p-3 border border-slate-200 rounded-lg bg-slate-50 focus:ring-2 focus:ring-emerald-500 outline-none" value={regState} onChange={e => setRegState(e.target.value)} />
+                          <input type="text" placeholder="Country" className="w-full sm:w-1/2 p-3 border border-slate-200 rounded-lg bg-slate-50 focus:ring-2 focus:ring-emerald-500 outline-none" value={regCountry} onChange={e => setCountry(e.target.value)} />
                       </div>
-                    </>
+                    </div>
                   )}
 
                   <input 
                     type="text" id="reg-username" name="username" autoComplete="username" placeholder="Choose Username" required 
-                    className="w-full p-3 border rounded-lg bg-slate-50 mt-4" value={username} onChange={e => setUsername(e.target.value)} 
+                    className="w-full p-3 border border-slate-200 rounded-lg bg-slate-50 mt-4 focus:ring-2 focus:ring-emerald-500 outline-none transition-all" value={username} onChange={e => setUsername(e.target.value)} 
                   />
                   <input 
                     type="password" id="reg-password" name="password" autoComplete="new-password" placeholder="Choose Password" required 
-                    className="w-full p-3 border rounded-lg bg-slate-50" value={password} onChange={e => setPassword(e.target.value)} 
+                    className="w-full p-3 border border-slate-200 rounded-lg bg-slate-50 focus:ring-2 focus:ring-emerald-500 outline-none transition-all" value={password} onChange={e => setPassword(e.target.value)} 
                   />
-                  <button type="submit" className="w-full bg-emerald-600 text-white font-bold py-3 rounded-lg hover:bg-emerald-700 mt-2">Register Now</button>
+                  <button 
+                    type="submit" 
+                    disabled={isLoading}
+                    className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-3 rounded-lg transition-all flex items-center justify-center h-12 shadow-md hover:shadow-lg mt-2"
+                  >
+                    {isLoading ? (
+                      <svg className="animate-spin h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                      </svg>
+                    ) : (
+                      "Register Now"
+                    )}
+                  </button>
                 </form>
                 <p className="text-center text-sm text-slate-500 mt-6">Already have an account? <button type="button" onClick={() => {setView('login'); setAuthError('');}} className="text-emerald-600 font-bold hover:underline">Back to Login</button></p>
               </>
@@ -426,13 +488,13 @@ export default function App() {
           </div>
         </div>
       ) : (
-        <>
+        <div className="animate-in fade-in duration-700">
           <nav className="bg-white shadow-sm border-b px-4 md:px-8 py-4 flex flex-wrap gap-4 justify-between items-center fixed w-full z-20 top-0">
             <h1 className="text-xl font-bold text-blue-600 flex items-center gap-2"><Activity /> ClinicalPortal</h1>
             <div className="flex gap-3 md:gap-4 items-center">
               <button onClick={() => setTextSize(textSize === 'normal' ? 'large' : 'normal')} className="text-slate-400 hover:text-blue-600 md:mr-4" title="Toggle Accessibility Text Size"><Settings size={18} /></button>
               <span className="text-xs md:text-sm font-medium bg-slate-100 px-3 py-1 rounded-full">{user.real_name} ({user.role})</span>
-              <button onClick={() => {setUser(null); setView('login');}} className="text-sm text-slate-500 hover:text-red-500 font-medium">Log Out</button>
+              <button onClick={() => {setUser(null); setView('login');}} className="text-sm text-slate-500 hover:text-red-500 font-medium transition-colors">Log Out</button>
             </div>
           </nav>
 
@@ -461,18 +523,18 @@ export default function App() {
 
             <div className="col-span-1 lg:col-span-3 space-y-6">
               {view === 'provider_search' && (
-                 <div className="bg-white p-6 md:p-10 rounded-2xl shadow-sm border border-slate-100">
+                 <div className="bg-white p-6 md:p-10 rounded-2xl shadow-sm border border-slate-100 animate-in fade-in slide-in-from-bottom-4 duration-500">
                    <h3 className="text-xl font-bold mb-6 flex items-center gap-2"><Search className="text-blue-600"/> Find Patient Chart</h3>
                    <div className="flex flex-col sm:flex-row gap-4">
-                     <input type="text" placeholder="Enter patient name" className="flex-1 p-4 border border-slate-200 rounded-xl bg-slate-50" value={searchQuery} onChange={e => setSearchQuery(e.target.value)} />
-                     <button onClick={() => fetchPatientData(searchQuery)} className="bg-blue-600 text-white px-8 py-4 sm:py-0 font-bold rounded-xl hover:bg-blue-700 transition">Access Chart</button>
+                     <input type="text" placeholder="Enter patient name" className="flex-1 p-4 border border-slate-200 rounded-xl bg-slate-50 focus:ring-2 focus:ring-blue-500 outline-none transition-all" value={searchQuery} onChange={e => setSearchQuery(e.target.value)} />
+                     <button onClick={() => fetchPatientData(searchQuery)} className="bg-blue-600 text-white px-8 py-4 sm:py-0 font-bold rounded-xl hover:bg-blue-700 transition shadow-sm hover:shadow-md">Access Chart</button>
                    </div>
                  </div>
               )}
 
               {view === 'dashboard' && activePatient && (
-                <>
-                  <div className="bg-white p-2 rounded-xl shadow-sm border border-slate-100 flex gap-2 overflow-x-auto snap-x">
+                <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
+                  <div className="bg-white p-2 rounded-xl shadow-sm border border-slate-100 flex gap-2 overflow-x-auto snap-x mb-6">
                      <button onClick={() => setDashTab('profile')} className={`flex-1 min-w-[120px] snap-start py-3 rounded-lg font-bold flex flex-col sm:flex-row items-center justify-center gap-1 sm:gap-2 transition text-sm sm:text-base ${dashTab === 'profile' ? 'bg-emerald-50 text-emerald-700' : 'text-slate-500 hover:bg-slate-50'}`}><ClipboardList size={18}/> Profile</button>
                      <button onClick={() => setDashTab('visits')} className={`flex-1 min-w-[120px] snap-start py-3 rounded-lg font-bold flex flex-col sm:flex-row items-center justify-center gap-1 sm:gap-2 transition text-sm sm:text-base ${dashTab === 'visits' ? 'bg-purple-50 text-purple-700' : 'text-slate-500 hover:bg-slate-50'}`}><Stethoscope size={18}/> Encounters</button>
                      <button onClick={() => setDashTab('prescriptions')} className={`flex-1 min-w-[120px] snap-start py-3 rounded-lg font-bold flex flex-col sm:flex-row items-center justify-center gap-1 sm:gap-2 transition text-sm sm:text-base ${dashTab === 'prescriptions' ? 'bg-cyan-50 text-cyan-700' : 'text-slate-500 hover:bg-slate-50'}`}><Pill size={18}/> Rx & Meds</button>
@@ -484,7 +546,7 @@ export default function App() {
                   </div>
 
                   {dashTab === 'profile' && (
-                     <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                     <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 animate-in fade-in duration-300">
                         <div className="lg:col-span-1 bg-white p-6 rounded-2xl shadow-sm border border-slate-100 h-fit">
                             <h3 className="font-bold text-slate-800 text-lg mb-4 border-b pb-2">Personal Info</h3>
                             <div className="space-y-4 text-sm break-words">
@@ -501,27 +563,27 @@ export default function App() {
                             <div className="flex flex-wrap gap-2 justify-between items-center mb-4 border-b pb-2">
                                 <h3 className="font-bold text-slate-800 text-lg">Clinical Overview</h3>
                                 {user.role === 'Provider' && !isEditingProfile && (
-                                    <button onClick={() => setIsEditingProfile(true)} className="flex items-center gap-1 text-sm text-blue-600 font-bold hover:underline"><Edit3 size={16}/> Edit Profile</button>
+                                    <button onClick={() => setIsEditingProfile(true)} className="flex items-center gap-1 text-sm text-blue-600 font-bold hover:underline transition-colors"><Edit3 size={16}/> Edit Profile</button>
                                 )}
                                 {isEditingProfile && (
-                                    <button onClick={handleSaveProfile} className="flex items-center gap-1 text-sm bg-emerald-600 text-white px-4 py-1.5 rounded-lg font-bold hover:bg-emerald-700 transition"><Save size={16}/> Save Changes</button>
+                                    <button onClick={handleSaveProfile} className="flex items-center gap-1 text-sm bg-emerald-600 text-white px-4 py-1.5 rounded-lg font-bold hover:bg-emerald-700 transition shadow-sm"><Save size={16}/> Save Changes</button>
                                 )}
                             </div>
 
                             {isEditingProfile ? (
-                                <div className="space-y-4">
-                                    <div><label className="text-sm font-bold text-slate-700">Dangerous Allergies</label><input type="text" value={profileForm.allergies} onChange={e => setProfileForm({...profileForm, allergies: e.target.value})} placeholder="e.g. Penicillin" className="w-full p-2 border rounded-lg bg-slate-50 mt-1" /></div>
-                                    <div><label className="text-sm font-bold text-slate-700">Chronic Diseases</label><input type="text" value={profileForm.chronic_diseases} onChange={e => setProfileForm({...profileForm, chronic_diseases: e.target.value})} placeholder="e.g. Diabetes" className="w-full p-2 border rounded-lg bg-slate-50 mt-1" /></div>
-                                    <div><label className="text-sm font-bold text-slate-700">Genetic Conditions</label><input type="text" value={profileForm.genetic_conditions} onChange={e => setProfileForm({...profileForm, genetic_conditions: e.target.value})} placeholder="e.g. BRCA1 Positive" className="w-full p-2 border rounded-lg bg-slate-50 mt-1" /></div>
-                                    <div><label className="text-sm font-bold text-slate-700">Provider Notes</label><textarea value={profileForm.notes} onChange={e => setProfileForm({...profileForm, notes: e.target.value})} className="w-full p-2 border rounded-lg bg-slate-50 mt-1 h-24" placeholder="Enter clinical notes..."></textarea></div>
+                                <div className="space-y-4 animate-in fade-in duration-300">
+                                    <div><label className="text-sm font-bold text-slate-700">Dangerous Allergies</label><input type="text" value={profileForm.allergies} onChange={e => setProfileForm({...profileForm, allergies: e.target.value})} placeholder="e.g. Penicillin" className="w-full p-2 border rounded-lg bg-slate-50 mt-1 focus:ring-2 focus:ring-blue-500 outline-none transition-all" /></div>
+                                    <div><label className="text-sm font-bold text-slate-700">Chronic Diseases</label><input type="text" value={profileForm.chronic_diseases} onChange={e => setProfileForm({...profileForm, chronic_diseases: e.target.value})} placeholder="e.g. Diabetes" className="w-full p-2 border rounded-lg bg-slate-50 mt-1 focus:ring-2 focus:ring-blue-500 outline-none transition-all" /></div>
+                                    <div><label className="text-sm font-bold text-slate-700">Genetic Conditions</label><input type="text" value={profileForm.genetic_conditions} onChange={e => setProfileForm({...profileForm, genetic_conditions: e.target.value})} placeholder="e.g. BRCA1 Positive" className="w-full p-2 border rounded-lg bg-slate-50 mt-1 focus:ring-2 focus:ring-blue-500 outline-none transition-all" /></div>
+                                    <div><label className="text-sm font-bold text-slate-700">Provider Notes</label><textarea value={profileForm.notes} onChange={e => setProfileForm({...profileForm, notes: e.target.value})} className="w-full p-2 border rounded-lg bg-slate-50 mt-1 h-24 focus:ring-2 focus:ring-blue-500 outline-none transition-all" placeholder="Enter clinical notes..."></textarea></div>
                                 </div>
                             ) : (
-                                <div className="space-y-6">
+                                <div className="space-y-6 animate-in fade-in duration-300">
                                     <div>
                                         <h4 className="text-sm font-bold text-red-500 uppercase flex items-center gap-1 mb-2"><AlertTriangle size={16}/> Allergies</h4>
                                         <div className="flex flex-wrap gap-2">
                                             {patientData.profile?.allergies ? patientData.profile.allergies.split(',').map((item, i) => (
-                                                <span key={i} className="bg-red-50 text-red-700 border border-red-100 px-3 py-1 rounded-md font-semibold text-sm">{item.trim()}</span>
+                                                <span key={i} className="bg-red-50 text-red-700 border border-red-100 px-3 py-1 rounded-md font-semibold text-sm shadow-sm">{item.trim()}</span>
                                             )) : <span className="text-slate-400 text-sm italic">No allergies recorded.</span>}
                                         </div>
                                     </div>
@@ -529,7 +591,7 @@ export default function App() {
                                         <h4 className="text-sm font-bold text-indigo-500 uppercase mb-2">Chronic Diseases</h4>
                                         <div className="flex flex-wrap gap-2">
                                             {patientData.profile?.chronic_diseases ? patientData.profile.chronic_diseases.split(',').map((item, i) => (
-                                                <span key={i} className="bg-indigo-50 text-indigo-700 border border-indigo-100 px-3 py-1 rounded-md font-semibold text-sm">{item.trim()}</span>
+                                                <span key={i} className="bg-indigo-50 text-indigo-700 border border-indigo-100 px-3 py-1 rounded-md font-semibold text-sm shadow-sm">{item.trim()}</span>
                                             )) : <span className="text-slate-400 text-sm italic">No chronic diseases recorded.</span>}
                                         </div>
                                     </div>
@@ -537,13 +599,13 @@ export default function App() {
                                         <h4 className="text-sm font-bold text-blue-500 uppercase mb-2">Genetic Conditions</h4>
                                         <div className="flex flex-wrap gap-2">
                                             {patientData.profile?.genetic_conditions ? patientData.profile.genetic_conditions.split(',').map((item, i) => (
-                                                <span key={i} className="bg-blue-50 text-blue-700 border border-blue-100 px-3 py-1 rounded-md font-semibold text-sm">{item.trim()}</span>
+                                                <span key={i} className="bg-blue-50 text-blue-700 border border-blue-100 px-3 py-1 rounded-md font-semibold text-sm shadow-sm">{item.trim()}</span>
                                             )) : <span className="text-slate-400 text-sm italic">No genetic conditions recorded.</span>}
                                         </div>
                                     </div>
                                     <div>
                                         <h4 className="text-sm font-bold text-slate-500 uppercase mb-2">Provider Notes</h4>
-                                        <p className="text-sm text-slate-700 bg-slate-50 p-4 rounded-lg border whitespace-pre-wrap">{patientData.profile?.notes || "No notes recorded."}</p>
+                                        <p className="text-sm text-slate-700 bg-slate-50 p-4 rounded-lg border whitespace-pre-wrap shadow-inner">{patientData.profile?.notes || "No notes recorded."}</p>
                                     </div>
                                 </div>
                             )}
@@ -552,7 +614,7 @@ export default function App() {
                   )}
 
                   {dashTab === 'visits' && (
-                      <div className="space-y-6">
+                      <div className="space-y-6 animate-in fade-in duration-300">
                           <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100">
                               <h3 className="text-xl font-bold mb-2 text-slate-800 flex items-center gap-2"><Stethoscope className="text-purple-600"/> Clinical Encounters</h3>
                               <p className="text-slate-500 text-sm">A timeline of visits and processed documents.</p>
@@ -560,7 +622,7 @@ export default function App() {
                           
                           {patientData.visits && Object.keys(patientData.visits).length > 0 ? (
                               Object.values(patientData.visits).sort((a,b) => new Date(b.date) - new Date(a.date)).map((visit, idx) => (
-                                  <div key={idx} className="bg-white p-4 md:p-6 rounded-2xl shadow-sm border border-slate-100">
+                                  <div key={idx} className="bg-white p-4 md:p-6 rounded-2xl shadow-sm border border-slate-100 hover:shadow-md transition-shadow">
                                       <div className="flex justify-between items-center border-b pb-4 mb-4">
                                           <div>
                                               <h4 className="font-bold text-lg text-slate-800">Encounter: {visit.date}</h4>
@@ -570,7 +632,7 @@ export default function App() {
                                       
                                       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                                           <div className="space-y-4">
-                                              <div className="bg-emerald-50 p-4 rounded-xl border border-emerald-100">
+                                              <div className="bg-emerald-50 p-4 rounded-xl border border-emerald-100 shadow-sm">
                                                   <p className="text-xs font-bold text-emerald-700 uppercase mb-1">AI Visit Summary</p>
                                                   <p className="text-sm text-emerald-900 whitespace-pre-wrap leading-relaxed">
                                                       {visit.ai_summary || "No specific metrics detected in documents."}
@@ -580,7 +642,7 @@ export default function App() {
                                                   <p className="text-xs font-bold text-slate-500 uppercase mb-2">Attached Documents</p>
                                                   <ul className="space-y-2">
                                                       {visit.documents.map((doc, i) => (
-                                                          <li key={i} className="flex items-center gap-2 text-sm text-slate-700 bg-slate-50 p-2 rounded border break-all"><FileText size={14} className="text-slate-400 shrink-0"/> {doc}</li>
+                                                          <li key={i} className="flex items-center gap-2 text-sm text-slate-700 bg-slate-50 p-2 rounded border break-all hover:bg-slate-100 transition-colors cursor-pointer"><FileText size={14} className="text-slate-400 shrink-0"/> {doc}</li>
                                                       ))}
                                                   </ul>
                                               </div>
@@ -592,11 +654,11 @@ export default function App() {
                                                   value={visitNotes[visit.date] || ''} 
                                                   onChange={(e) => setVisitNotes({...visitNotes, [visit.date]: e.target.value})}
                                                   placeholder="Add clinical observations, treatment plans, or instructions here..."
-                                                  className="w-full flex-grow p-3 border rounded-lg bg-slate-50 text-sm focus:ring-2 focus:ring-purple-500 outline-none resize-none mb-3"
+                                                  className="w-full flex-grow p-3 border rounded-lg bg-slate-50 text-sm focus:ring-2 focus:ring-purple-500 outline-none resize-none mb-3 transition-all"
                                                   readOnly={user.role === 'Patient'}
                                               ></textarea>
                                               {user.role === 'Provider' && (
-                                                  <button onClick={() => handleSaveVisitNote(visit.date)} className="w-full bg-purple-600 text-white font-bold py-2 rounded-lg hover:bg-purple-700 transition flex items-center justify-center gap-2"><Save size={16}/> Save Visit Note</button>
+                                                  <button onClick={() => handleSaveVisitNote(visit.date)} className="w-full bg-purple-600 text-white font-bold py-2 rounded-lg hover:bg-purple-700 transition shadow-sm flex items-center justify-center gap-2"><Save size={16}/> Save Visit Note</button>
                                               )}
                                           </div>
                                       </div>
@@ -609,7 +671,7 @@ export default function App() {
                   )}
 
                   {dashTab === 'prescriptions' && (
-                     <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                     <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 animate-in fade-in duration-300">
                         <div className="lg:col-span-2 bg-white rounded-2xl shadow-sm border border-slate-100 h-fit">
                             <div className="bg-slate-50 px-6 py-4 border-b flex justify-between items-center">
                                 <h3 className="font-bold text-slate-800 text-lg flex items-center gap-2"><Pill className="text-cyan-600"/> Active Medications</h3>
@@ -618,10 +680,10 @@ export default function App() {
                                 {patientData.prescriptions && patientData.prescriptions.length > 0 ? (
                                     <ul className="space-y-4">
                                         {patientData.prescriptions.map((rx, idx) => (
-                                            <li key={idx} className="p-4 border rounded-xl bg-cyan-50 border-cyan-100">
+                                            <li key={idx} className="p-4 border rounded-xl bg-cyan-50 border-cyan-100 hover:shadow-md transition-shadow">
                                                 <div className="flex flex-col sm:flex-row justify-between sm:items-start mb-2 gap-2">
                                                     <h4 className="font-bold text-cyan-900 text-lg">{rx.medication}</h4>
-                                                    <span className="text-xs font-bold text-cyan-600 bg-white px-2 py-1 rounded border w-fit">Ordered: {rx.date}</span>
+                                                    <span className="text-xs font-bold text-cyan-600 bg-white px-2 py-1 rounded border w-fit shadow-sm">Ordered: {rx.date}</span>
                                                 </div>
                                                 <p className="text-sm font-semibold text-cyan-800 mb-1">Dosage: {rx.dosage}</p>
                                                 <p className="text-sm text-cyan-700 italic">"{rx.instructions}"</p>
@@ -636,10 +698,10 @@ export default function App() {
                                 <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100">
                                     <h3 className="font-bold text-slate-800 mb-4 flex items-center gap-2"><Edit3 className="text-cyan-600" size={20}/> New Prescription</h3>
                                     <form onSubmit={handleAddPrescription} className="space-y-4">
-                                        <div><label className="text-xs font-bold text-slate-500 uppercase">Medication Name</label><input type="text" required value={prescriptionInput.medication_name} onChange={e => setPrescriptionInput({...prescriptionInput, medication_name: e.target.value})} className="w-full p-2 border rounded bg-slate-50" /></div>
-                                        <div><label className="text-xs font-bold text-slate-500 uppercase">Dosage</label><input type="text" required value={prescriptionInput.dosage} onChange={e => setPrescriptionInput({...prescriptionInput, dosage: e.target.value})} className="w-full p-2 border rounded bg-slate-50" placeholder="e.g. 50mg" /></div>
-                                        <div><label className="text-xs font-bold text-slate-500 uppercase">Instructions (Sig)</label><textarea required value={prescriptionInput.instructions} onChange={e => setPrescriptionInput({...prescriptionInput, instructions: e.target.value})} className="w-full p-2 border rounded bg-slate-50 h-24" placeholder="e.g. Take 1 tablet by mouth daily"></textarea></div>
-                                        <button type="submit" className="w-full bg-cyan-600 text-white font-bold py-2 rounded">Prescribe</button>
+                                        <div><label className="text-xs font-bold text-slate-500 uppercase">Medication Name</label><input type="text" required value={prescriptionInput.medication_name} onChange={e => setPrescriptionInput({...prescriptionInput, medication_name: e.target.value})} className="w-full p-2 border rounded bg-slate-50 focus:ring-2 focus:ring-cyan-500 outline-none transition-all" /></div>
+                                        <div><label className="text-xs font-bold text-slate-500 uppercase">Dosage</label><input type="text" required value={prescriptionInput.dosage} onChange={e => setPrescriptionInput({...prescriptionInput, dosage: e.target.value})} className="w-full p-2 border rounded bg-slate-50 focus:ring-2 focus:ring-cyan-500 outline-none transition-all" placeholder="e.g. 50mg" /></div>
+                                        <div><label className="text-xs font-bold text-slate-500 uppercase">Instructions (Sig)</label><textarea required value={prescriptionInput.instructions} onChange={e => setPrescriptionInput({...prescriptionInput, instructions: e.target.value})} className="w-full p-2 border rounded bg-slate-50 h-24 focus:ring-2 focus:ring-cyan-500 outline-none transition-all" placeholder="e.g. Take 1 tablet by mouth daily"></textarea></div>
+                                        <button type="submit" className="w-full bg-cyan-600 text-white font-bold py-2 rounded hover:bg-cyan-700 transition shadow-sm">Prescribe</button>
                                     </form>
                                 </div>
                             </div>
@@ -648,7 +710,7 @@ export default function App() {
                   )}
 
                   {dashTab === 'orders' && (
-                     <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                     <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 animate-in fade-in duration-300">
                         <div className="lg:col-span-2 bg-white rounded-2xl shadow-sm border border-slate-100 h-fit">
                             <div className="bg-slate-50 px-6 py-4 border-b flex justify-between items-center">
                                 <h3 className="font-bold text-slate-800 text-lg flex items-center gap-2"><FileSignature className="text-pink-600"/> Lab & Imaging Orders</h3>
@@ -657,10 +719,10 @@ export default function App() {
                                 {patientData.ordered_tests && patientData.ordered_tests.length > 0 ? (
                                     <ul className="space-y-4">
                                         {patientData.ordered_tests.map((order, idx) => (
-                                            <li key={idx} className={`p-4 border rounded-xl ${order.status === 'Pending' ? 'bg-pink-50 border-pink-100' : 'bg-slate-50 border-slate-200'}`}>
+                                            <li key={idx} className={`p-4 border rounded-xl hover:shadow-md transition-shadow ${order.status === 'Pending' ? 'bg-pink-50 border-pink-100' : 'bg-slate-50 border-slate-200'}`}>
                                                 <div className="flex flex-col sm:flex-row justify-between sm:items-start mb-2 gap-2">
                                                     <h4 className={`font-bold text-lg ${order.status === 'Pending' ? 'text-pink-900' : 'text-slate-700 line-through'}`}>{order.test_name}</h4>
-                                                    <span className={`text-xs font-bold px-2 py-1 rounded border w-fit ${order.status === 'Pending' ? 'text-pink-600 bg-white border-pink-200' : 'text-emerald-600 bg-emerald-50 border-emerald-200'}`}>{order.status}</span>
+                                                    <span className={`text-xs font-bold px-2 py-1 rounded border w-fit shadow-sm ${order.status === 'Pending' ? 'text-pink-600 bg-white border-pink-200' : 'text-emerald-600 bg-emerald-50 border-emerald-200'}`}>{order.status}</span>
                                                 </div>
                                                 <p className={`text-sm italic ${order.status === 'Pending' ? 'text-pink-700' : 'text-slate-500'}`}>Reason: {order.reason}</p>
                                                 <p className="text-xs text-slate-400 mt-2">Ordered: {order.date}</p>
@@ -675,9 +737,9 @@ export default function App() {
                                 <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100">
                                     <h3 className="font-bold text-slate-800 mb-4 flex items-center gap-2"><Edit3 className="text-pink-600" size={20}/> New Order</h3>
                                     <form onSubmit={handleAddOrder} className="space-y-4">
-                                        <div><label className="text-xs font-bold text-slate-500 uppercase">Test Name</label><input type="text" required value={orderInput.test_name} onChange={e => setOrderInput({...orderInput, test_name: e.target.value})} className="w-full p-2 border rounded bg-slate-50" placeholder="e.g. Hemoglobin A1c" /></div>
-                                        <div><label className="text-xs font-bold text-slate-500 uppercase">Clinical Reason (Dx)</label><textarea required value={orderInput.reason} onChange={e => setOrderInput({...orderInput, reason: e.target.value})} className="w-full p-2 border rounded bg-slate-50 h-24" placeholder="e.g. Routine screening for diabetes"></textarea></div>
-                                        <button type="submit" className="w-full bg-pink-600 text-white font-bold py-2 rounded">Sign Order</button>
+                                        <div><label className="text-xs font-bold text-slate-500 uppercase">Test Name</label><input type="text" required value={orderInput.test_name} onChange={e => setOrderInput({...orderInput, test_name: e.target.value})} className="w-full p-2 border rounded bg-slate-50 focus:ring-2 focus:ring-pink-500 outline-none transition-all" placeholder="e.g. Hemoglobin A1c" /></div>
+                                        <div><label className="text-xs font-bold text-slate-500 uppercase">Clinical Reason (Dx)</label><textarea required value={orderInput.reason} onChange={e => setOrderInput({...orderInput, reason: e.target.value})} className="w-full p-2 border rounded bg-slate-50 h-24 focus:ring-2 focus:ring-pink-500 outline-none transition-all" placeholder="e.g. Routine screening for diabetes"></textarea></div>
+                                        <button type="submit" className="w-full bg-pink-600 text-white font-bold py-2 rounded hover:bg-pink-700 transition shadow-sm">Sign Order</button>
                                     </form>
                                 </div>
                             </div>
@@ -686,7 +748,7 @@ export default function App() {
                   )}
 
                   {dashTab === 'labs' && (
-                     <>
+                     <div className="animate-in fade-in duration-300">
                        {Object.keys(patientData.categories || {}).length > 0 ? (
                          <>
                            <div className="flex gap-2 border-b border-slate-200 pb-2 relative z-10 overflow-x-auto">
@@ -707,7 +769,7 @@ export default function App() {
                                      <ActivitySquare className="text-blue-600" size={24} />
                                      <label className="font-bold text-slate-700">Select Lab Test:</label>
                                    </div>
-                                   <select value={selectedTestName} onChange={(e) => setSelectedTestName(e.target.value)} className="p-3 border rounded-lg bg-slate-50 font-semibold w-full sm:w-auto min-w-[250px] cursor-pointer">
+                                   <select value={selectedTestName} onChange={(e) => setSelectedTestName(e.target.value)} className="p-3 border rounded-lg bg-slate-50 font-semibold w-full sm:w-auto min-w-[250px] cursor-pointer focus:ring-2 focus:ring-blue-500 outline-none transition-all">
                                        {patientData.categories[activeCategory].map(test => (<option key={test.test_name} value={test.test_name}>{test.test_name}</option>))}
                                    </select>
                                </div>
@@ -719,10 +781,10 @@ export default function App() {
                                const sortedHistory = [...activeTest.history].sort((a, b) => new Date(a.Date) - new Date(b.Date));
 
                                return (
-                                   <div className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden mt-6 flex flex-col">
+                                   <div className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden mt-6 flex flex-col animate-in fade-in duration-300">
                                        <div className="bg-slate-50 px-4 md:px-6 py-4 border-b flex flex-col sm:flex-row justify-between sm:items-center gap-2">
                                            <h3 className="font-bold text-slate-800 text-lg">{activeTest.test_name} Trend Analysis</h3>
-                                           <span className="text-sm bg-white border px-4 py-1.5 rounded-full font-medium w-fit">Range: {activeTest.normal_min} - {activeTest.normal_max} {activeTest.unit}</span>
+                                           <span className="text-sm bg-white border px-4 py-1.5 rounded-full font-medium w-fit shadow-sm">Range: {activeTest.normal_min} - {activeTest.normal_max} {activeTest.unit}</span>
                                        </div>
                                        <div className="grid grid-cols-1 lg:grid-cols-2">
                                            <div className="p-2 sm:p-6 border-b lg:border-b-0 lg:border-r h-[300px] lg:h-80">
@@ -750,10 +812,10 @@ export default function App() {
                                                                 else if (diff < 0) deltaHTML = <span className="text-xs text-emerald-500 font-bold ml-2">(↓ {Math.abs(diff).toFixed(2)})</span>;
                                                             }
                                                             return (
-                                                            <tr key={i} className="hover:bg-slate-50">
+                                                            <tr key={i} className="hover:bg-slate-50 transition-colors">
                                                                 <td className="py-3 text-sm font-medium border-b">{record.Date}</td>
                                                                 <td className="py-3 text-sm font-bold border-b">{record.Value} {activeTest.unit} {deltaHTML}</td>
-                                                                <td className="py-3 border-b"><span className={`text-xs px-2 py-1 rounded-full font-bold whitespace-nowrap ${record.Status === 'Normal' ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-700'}`}>{record.Status}</span></td>
+                                                                <td className="py-3 border-b"><span className={`text-xs px-2 py-1 rounded-full font-bold whitespace-nowrap shadow-sm ${record.Status === 'Normal' ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-700'}`}>{record.Status}</span></td>
                                                             </tr>
                                                             );
                                                        })}
@@ -766,11 +828,11 @@ export default function App() {
                            })()}
                          </>
                        ) : (<div className="bg-white p-12 text-center rounded-2xl border"><p className="text-slate-500">No lab data available.</p></div>)}
-                     </>
+                     </div>
                   )}
 
                   {dashTab === 'growth' && (
-                     <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                     <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 animate-in fade-in duration-300">
                         <div className="lg:col-span-2 bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden flex flex-col h-[400px] lg:h-[550px]">
                             <div className="bg-slate-50 px-4 md:px-6 py-4 border-b border-slate-100 flex justify-between items-center">
                                 <h3 className="font-bold text-slate-800 text-lg flex items-center gap-2"><ActivitySquare className="text-orange-600"/> Trajectory</h3>
@@ -797,12 +859,12 @@ export default function App() {
                             <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100">
                                 <h3 className="font-bold text-slate-800 mb-4 flex items-center gap-2"><Scale className="text-orange-500" size={20}/> Log New Vitals</h3>
                                 <form onSubmit={handleLogVitals} className="space-y-4">
-                                    <div><label className="text-xs font-bold text-slate-500 uppercase">Height (cm)</label><input type="number" step="0.1" value={vitalsInput.height} onChange={(e) => setVitalsInput({...vitalsInput, height: e.target.value})} className="w-full p-2 border rounded bg-slate-50" /></div>
-                                    <div><label className="text-xs font-bold text-slate-500 uppercase">Weight (kg)</label><input type="number" step="0.1" value={vitalsInput.weight} onChange={(e) => setVitalsInput({...vitalsInput, weight: e.target.value})} className="w-full p-2 border rounded bg-slate-50" /></div>
-                                    <button type="submit" className="w-full bg-orange-500 text-white font-bold py-2 rounded">Save to Chart</button>
+                                    <div><label className="text-xs font-bold text-slate-500 uppercase">Height (cm)</label><input type="number" step="0.1" value={vitalsInput.height} onChange={(e) => setVitalsInput({...vitalsInput, height: e.target.value})} className="w-full p-2 border rounded bg-slate-50 focus:ring-2 focus:ring-orange-500 outline-none transition-all" /></div>
+                                    <div><label className="text-xs font-bold text-slate-500 uppercase">Weight (kg)</label><input type="number" step="0.1" value={vitalsInput.weight} onChange={(e) => setVitalsInput({...vitalsInput, weight: e.target.value})} className="w-full p-2 border rounded bg-slate-50 focus:ring-2 focus:ring-orange-500 outline-none transition-all" /></div>
+                                    <button type="submit" className="w-full bg-orange-500 text-white font-bold py-2 rounded hover:bg-orange-600 transition shadow-sm">Save to Chart</button>
                                 </form>
                                 {patientData.vitals && patientData.vitals.length > 0 && (
-                                    <div className="mt-4 p-3 bg-orange-50 rounded-lg text-center border border-orange-100">
+                                    <div className="mt-4 p-3 bg-orange-50 rounded-lg text-center border border-orange-100 shadow-inner">
                                         <p className="text-sm text-orange-800 font-bold mb-1">Current BMI</p><p className="text-2xl text-orange-600 font-black">{patientData.vitals[patientData.vitals.length-1].BMI}</p>
                                     </div>
                                 )}
@@ -810,15 +872,15 @@ export default function App() {
                             <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100">
                                 <h3 className="font-bold text-slate-800 mb-4 flex items-center gap-2"><Calculator className="text-blue-500" size={20}/> Target Height</h3>
                                 <div className="space-y-3">
-                                    <input type="number" value={parentsHeight.mom} onChange={(e) => setParentsHeight({...parentsHeight, mom: e.target.value})} className="w-full p-2 border rounded bg-slate-50 text-sm" placeholder="Mother's Height (cm)" />
-                                    <input type="number" value={parentsHeight.dad} onChange={(e) => setParentsHeight({...parentsHeight, dad: e.target.value})} className="w-full p-2 border rounded bg-slate-50 text-sm" placeholder="Father's Height (cm)" />
-                                    <button onClick={calculateProjectedHeight} className="w-full bg-blue-50 text-blue-700 border border-blue-200 font-bold py-2 rounded">Calculate</button>
+                                    <input type="number" value={parentsHeight.mom} onChange={(e) => setParentsHeight({...parentsHeight, mom: e.target.value})} className="w-full p-2 border rounded bg-slate-50 text-sm focus:ring-2 focus:ring-blue-500 outline-none transition-all" placeholder="Mother's Height (cm)" />
+                                    <input type="number" value={parentsHeight.dad} onChange={(e) => setParentsHeight({...parentsHeight, dad: e.target.value})} className="w-full p-2 border rounded bg-slate-50 text-sm focus:ring-2 focus:ring-blue-500 outline-none transition-all" placeholder="Father's Height (cm)" />
+                                    <button onClick={calculateProjectedHeight} className="w-full bg-blue-50 text-blue-700 border border-blue-200 font-bold py-2 rounded hover:bg-blue-100 transition shadow-sm">Calculate</button>
                                 </div>
                                 
                                 {predictedHeight && (
-                                    <div className="mt-4 space-y-2">
-                                        <div className="flex justify-between p-2 bg-blue-50 rounded text-sm font-bold text-blue-800"><span>If Male:</span> <span>{predictedHeight.boy} cm</span></div>
-                                        <div className="flex justify-between p-2 bg-pink-50 rounded text-sm font-bold text-pink-800"><span>If Female:</span> <span>{predictedHeight.girl} cm</span></div>
+                                    <div className="mt-4 space-y-2 animate-in fade-in slide-in-from-top-2 duration-300">
+                                        <div className="flex justify-between p-2 bg-blue-50 rounded text-sm font-bold text-blue-800 shadow-inner"><span>If Male:</span> <span>{predictedHeight.boy} cm</span></div>
+                                        <div className="flex justify-between p-2 bg-pink-50 rounded text-sm font-bold text-pink-800 shadow-inner"><span>If Female:</span> <span>{predictedHeight.girl} cm</span></div>
                                     </div>
                                 )}
                             </div>
@@ -827,15 +889,15 @@ export default function App() {
                   )}
 
                   {dashTab === 'vaccines' && (
-                     <div className="bg-white p-4 md:p-8 rounded-2xl border">
+                     <div className="bg-white p-4 md:p-8 rounded-2xl border animate-in fade-in duration-300 shadow-sm">
                         <h3 className="text-xl font-bold mb-6 flex items-center gap-2"><Syringe className="text-indigo-600"/> Immunization Record</h3>
                         {patientData.vaccines && patientData.vaccines.length > 0 ? (
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                 {patientData.vaccines.map((vac, idx) => (
-                                    <div key={idx} className="p-4 md:p-5 border rounded-xl bg-slate-50 flex flex-col justify-between">
+                                    <div key={idx} className="p-4 md:p-5 border rounded-xl bg-slate-50 flex flex-col justify-between hover:shadow-md transition-shadow">
                                         <div className="flex justify-between items-start mb-4 gap-2">
                                             <h4 className="font-bold text-lg">{vac.name}</h4>
-                                            <span className={`text-xs font-bold px-3 py-1 rounded-full whitespace-nowrap ${vac.status === 'Valid' ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-700'}`}>{vac.status}</span>
+                                            <span className={`text-xs font-bold px-3 py-1 rounded-full whitespace-nowrap shadow-sm ${vac.status === 'Valid' ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-700'}`}>{vac.status}</span>
                                         </div>
                                         <div className="flex flex-col sm:flex-row sm:justify-between text-sm text-slate-600 gap-1"><span><strong>Given:</strong> {vac.date_administered}</span><span><strong>Expires:</strong> {vac.expiration_date}</span></div>
                                     </div>
@@ -846,15 +908,15 @@ export default function App() {
                   )}
 
                   {dashTab === 'diseases' && (
-                     <div className="bg-white p-4 md:p-8 rounded-2xl border overflow-x-auto">
+                     <div className="bg-white p-4 md:p-8 rounded-2xl border overflow-x-auto animate-in fade-in duration-300 shadow-sm">
                         <h3 className="text-xl font-bold mb-6 flex items-center gap-2"><Bug className="text-rose-600"/> Disease Screenings</h3>
                         {patientData.diseases && patientData.diseases.length > 0 ? (
                             <table className="w-full text-left min-w-[400px]">
-                                <thead className="bg-slate-50"><tr><th className="p-4">Condition</th><th className="p-4">Date Tested</th><th className="p-4">Result</th></tr></thead>
+                                <thead className="bg-slate-50 border-b"><tr><th className="p-4">Condition</th><th className="p-4">Date Tested</th><th className="p-4">Result</th></tr></thead>
                                 <tbody>
                                     {patientData.diseases.map((dis, idx) => (
-                                        <tr key={idx} className="border-b"><td className="p-4 font-semibold">{dis.name}</td><td className="p-4 text-slate-600">{dis.date_tested}</td>
-                                            <td className="p-4"><span className={`font-bold px-3 py-1 rounded-full text-sm ${dis.result === 'Negative' ? 'bg-emerald-50 text-emerald-600' : 'bg-red-50 text-red-600'}`}>{dis.result}</span></td>
+                                        <tr key={idx} className="border-b hover:bg-slate-50 transition-colors"><td className="p-4 font-semibold">{dis.name}</td><td className="p-4 text-slate-600">{dis.date_tested}</td>
+                                            <td className="p-4"><span className={`font-bold px-3 py-1 rounded-full text-sm shadow-sm ${dis.result === 'Negative' ? 'bg-emerald-50 text-emerald-600' : 'bg-red-50 text-red-600'}`}>{dis.result}</span></td>
                                         </tr>
                                     ))}
                                 </tbody>
@@ -862,16 +924,16 @@ export default function App() {
                         ) : (<p className="text-slate-500 py-10 text-center">No records found.</p>)}
                      </div>
                   )}
-                </>
+                </div>
               )}
 
               {view === 'upload' && activePatient && (
-                <div className="space-y-6">
+                <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
                   <div className="bg-white p-8 md:p-12 rounded-2xl shadow-sm border border-slate-100 text-center">
                     <div className="w-20 h-20 bg-blue-50 rounded-full flex items-center justify-center mx-auto mb-6"><Upload size={32} className="text-blue-600" /></div>
                     <h3 className="text-xl font-bold mb-2">Upload to Chart</h3>
                     <p className="text-slate-500 mb-4">{activePatient}</p>
-                    <label className="cursor-pointer bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-6 rounded-xl inline-block mt-2">
+                    <label className="cursor-pointer bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-6 rounded-xl inline-block mt-2 transition shadow-md hover:shadow-lg">
                       <span>Browse File</span><input type="file" onChange={handleFileUpload} className="hidden" />
                     </label>
                   </div>
@@ -879,12 +941,12 @@ export default function App() {
               )}
             </div>
           </div>
-        </>
+        </div>
       )}
 
       {/* SMART SCANNING LOADING OVERLAY */}
       {isScanning && (
-        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-[99999] flex flex-col justify-center items-center text-white px-4">
+        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-[99999] flex flex-col justify-center items-center text-white px-4 animate-in fade-in duration-300">
           <div className="bg-white p-8 rounded-2xl shadow-2xl flex flex-col items-center max-w-sm w-full text-center border border-slate-100">
             <Activity className="text-blue-600 animate-pulse mb-4 animate-spin" size={48} />
             <h3 className="text-slate-900 font-bold text-lg mb-1">AI Smart Scanning Active</h3>

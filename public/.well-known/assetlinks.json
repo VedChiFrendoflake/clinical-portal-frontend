@@ -1,0 +1,7 @@
+[{
+      "relation": ["delegate_permission/common.handle_all_urls"],
+      "target": {
+        "namespace": "android_app",
+        "package_name": "com.clinicalportal.app",
+        "sha256_cert_fingerprints": ["03:61:E4:8E:A7:4B:4F:9C:7E:0A:ED:77:BB:15:C8:46:13:4F:6E:D0:8F:1B:D2:DD:26:96:34:88:05:E8:0C:03"]
+      }

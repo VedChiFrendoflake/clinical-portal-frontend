@@ -1,43 +1,39 @@
-// 1. Your existing Install Event (Keeps the app working offline)
 self.addEventListener('install', (e) => {
   e.waitUntil(
     caches.open('clinical-portal-store').then((cache) => cache.addAll(['/']))
   );
 });
 
-// 2. The Combined Fetch Event
 self.addEventListener('fetch', (e) => {
-  
-  // --- NEW CAPABILITY: Catch the Android Share File ---
+  // 1. CATCH ANDROID SHARE FILES
   if (e.request.method === 'POST' && e.request.url.includes('incoming_share=true')) {
     e.respondWith((async () => {
       try {
         const formData = await e.request.formData();
-        const file = formData.get('file');
+        const file = formData.get('file'); // Or whatever the parameter name is in your share_target
+        const text = formData.get('text'); // Catch forwarded text messages
 
+        const cache = await caches.open('shared-files-cache');
+        
         if (file) {
-          // Save the file in a temporary hidden cache
-          const cache = await caches.open('shared-files-cache');
           await cache.put('/latest-shared-file', new Response(file, {
-            headers: {
-              'Content-Type': file.type,
-              'X-File-Name': file.name || 'Shared_Document'
-            }
+            headers: { 'Content-Type': file.type, 'X-File-Name': file.name || 'Shared_Document' }
           }));
         }
+        if (text) {
+          await cache.put('/latest-shared-text', new Response(text));
+        }
       } catch (err) {
-        console.error("Error catching shared file:", err);
+        console.error("Error catching shared item:", err);
       }
       
-      // Redirect the user to the main app so React can load
-      return Response.redirect('/', 303);
+      // Redirect to the app with a flag!
+      return Response.redirect('/?incoming_share=true', 303);
     })());
-    
-    return; // Stop here so it doesn't run the standard cache logic below
+    return;
   }
 
-  // --- YOUR EXISTING CAPABILITY: Standard Offline Caching ---
-  // (We only want this to run for normal GET requests, not POSTs)
+  // 2. STANDARD OFFLINE CACHE (Only for GET requests)
   if (e.request.method === 'GET') {
     e.respondWith(
       caches.match(e.request).then((response) => response || fetch(e.request))

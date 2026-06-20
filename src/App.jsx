@@ -380,10 +380,27 @@ export default function App() {
                 <div className="h-12 w-12 bg-blue-100 text-blue-600 flex items-center justify-center rounded-full font-bold text-xl min-w-[3rem]"><User /></div>
                 <div><p className="font-bold text-slate-800 leading-tight">{user.real_name}</p><p className="text-xs text-slate-500 font-mono">{user.role}</p></div>
               </div>
+              
+              {/* --- 🔐 MINI VAULT IN SIDEBAR --- */}
               <div className="bg-slate-50 border border-slate-200 rounded-lg p-3 mb-4 text-center">
                   <p className="text-xs text-slate-500 uppercase font-bold mb-1">Your CliniPort ID</p>
-                  <p className="text-lg font-mono font-black text-blue-700 tracking-wider">{isIdUnlocked ? user.uid : '••••••••'}</p>
+                  <p className="text-lg font-mono font-black text-blue-700 tracking-wider mb-2">{isIdUnlocked ? user.uid : '••••••••'}</p>
+                  
+                  {!isIdUnlocked ? (
+                      <form onSubmit={handleUnlockId} className="flex flex-col gap-2 mt-2 animate-in fade-in duration-300">
+                          {unlockError && <p className="text-[10px] text-red-600 font-bold leading-tight">{unlockError}</p>}
+                          <input type="password" placeholder="Passcode to reveal" value={unlockPassword} onChange={(e) => setUnlockPassword(e.target.value)} className="w-full text-xs p-2 border border-slate-300 rounded focus:ring-2 focus:ring-blue-500 outline-none text-center" required />
+                          <button type="submit" disabled={isUnlocking} className="w-full bg-slate-800 text-white text-xs font-bold py-2 rounded hover:bg-slate-900 transition shadow-sm">
+                              {isUnlocking ? 'Unlocking...' : 'Unlock ID'}
+                          </button>
+                      </form>
+                  ) : (
+                      <button onClick={() => setIsIdUnlocked(false)} className="text-xs font-bold text-blue-600 hover:text-blue-800 hover:underline transition-all">
+                          Lock Now
+                      </button>
+                  )}
               </div>
+              
               <hr className="mb-4 border-slate-100" />
               <ul className="space-y-2">
                 {user.role === 'Provider' && (
@@ -507,30 +524,6 @@ export default function App() {
                                 </div>
                             )}
                         </div>
-
-                        {/* 🔐 SECURE ID VAULT */}
-                        <div className="lg:col-span-3 bg-white p-6 rounded-2xl shadow-sm border border-slate-100 mt-2 animate-in fade-in duration-500">
-                            <h3 className="font-bold text-slate-800 text-lg mb-4 border-b pb-2 flex items-center gap-2"><ShieldCheck className="text-blue-600" size={20}/> Secure CliniPort ID</h3>
-                            {isIdUnlocked ? (
-                                <div className="bg-blue-50 border border-blue-200 rounded-xl p-6 text-center animate-in zoom-in-95 duration-300">
-                                    <p className="text-sm text-blue-600 font-bold uppercase tracking-wider mb-2">Your Unique Identifier</p>
-                                    <p className="text-4xl font-mono font-black text-blue-800 tracking-widest">{user.uid}</p>
-                                    <p className="text-xs text-blue-500 mt-3">This will automatically lock in 30 seconds.</p>
-                                    <button onClick={() => setIsIdUnlocked(false)} className="mt-4 text-sm bg-white border border-blue-200 text-blue-600 font-bold px-4 py-2 rounded-lg hover:bg-blue-100 transition shadow-sm">Lock Now</button>
-                                </div>
-                            ) : (
-                                <div className="bg-slate-50 border border-slate-200 rounded-xl p-6 flex flex-col items-center justify-center">
-                                    <ShieldAlert className="text-slate-400 mb-3" size={32} />
-                                    <p className="text-slate-600 font-medium mb-4 text-center">Your CliniPort ID is masked to protect your privacy.<br/>Enter your passcode to reveal it.</p>
-                                    {unlockError && <p className="text-sm text-red-600 font-bold mb-3 bg-red-50 px-3 py-1 rounded">{unlockError}</p>}
-                                    <form onSubmit={handleUnlockId} className="flex w-full max-w-sm gap-2">
-                                        <input type="password" placeholder="Enter Passcode" value={unlockPassword} onChange={(e) => setUnlockPassword(e.target.value)} className="flex-1 p-3 border border-slate-300 rounded-xl bg-white focus:ring-2 focus:ring-blue-500 outline-none transition-all" required />
-                                        <button type="submit" disabled={isUnlocking} className="bg-slate-800 text-white font-bold px-6 py-3 rounded-xl hover:bg-slate-900 transition shadow-sm">{isUnlocking ? '...' : 'Unlock'}</button>
-                                    </form>
-                                </div>
-                            )}
-                        </div>
-
                      </div>
                   )}
 

@@ -1,6 +1,6 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine, Legend } from 'recharts';
-import { Activity, Upload, User, ShieldCheck, UserPlus, Search, Users, CheckCircle, ActivitySquare, Syringe, Bug, FlaskConical, AlertTriangle, ShieldAlert, Ruler, Scale, Calculator, ClipboardList, Edit3, Save, Stethoscope, FileText, Pill, FileSignature, Settings, Link as LinkIcon, Inbox } from 'lucide-react';
+import { Activity, Upload, User, ShieldCheck, UserPlus, Search, Users, CheckCircle, ActivitySquare, Syringe, Bug, FlaskConical, AlertTriangle, ShieldAlert, Ruler, Scale, Calculator, ClipboardList, Edit3, Save, Stethoscope, FileText, Pill, FileSignature, Settings, Link as LinkIcon, Inbox, Bell, Trash2 } from 'lucide-react';
 
 const BACKEND_URL = "https://clinical-portal-backend-production.up.railway.app";
 
@@ -25,9 +25,6 @@ export default function App() {
   const [regGender, setRegGender] = useState('Male');
   const [regEmail, setRegEmail] = useState('');
   const [regPhone, setRegPhone] = useState('');
-  const [regStreet, setRegStreet] = useState('');
-  const [regState, setRegState] = useState('');
-  const [regCountry, setRegCountry] = useState('');
   
   const [activePatient, setActivePatient] = useState(''); 
   const [patientData, setPatientData] = useState({ ai_summary: '', categories: {}, vaccines: [], diseases: [], uploaded_files: [], vitals: [], personal_info: {}, profile: {}, visits: {}, prescriptions: [], ordered_tests: [] });
@@ -38,10 +35,14 @@ export default function App() {
 
   const [connectIdInput, setConnectIdInput] = useState('');
   const [providerRoster, setProviderRoster] = useState([]); 
-  const [pendingRequests, setPendingRequests] = useState([]); 
-
   const [familyMembers, setFamilyMembers] = useState([]);
   const [newFamilyMember, setNewFamilyMember] = useState({ name: '', age: '', gender: 'Male', username: '', password: '' });
+
+  // --- 🔔 INBOX & NOTIFICATION STATE ---
+  const [pendingRequests, setPendingRequests] = useState([]); 
+  const [notifications, setNotifications] = useState([]);
+  const prevNotifCount = useRef(0);
+  const prevReqCount = useRef(0);
 
   const [isIdUnlocked, setIsIdUnlocked] = useState(false);
   const [unlockPassword, setUnlockPassword] = useState('');
@@ -50,8 +51,6 @@ export default function App() {
 
   const [scanModal, setScanModal] = useState(null); 
   const [vitalsInput, setVitalsInput] = useState({ height: '', weight: '' });
-  const [parentsHeight, setParentsHeight] = useState({ mom: '', dad: '' });
-  const [predictedHeight, setPredictedHeight] = useState(null);
   const [isEditingProfile, setIsEditingProfile] = useState(false);
   const [profileForm, setProfileForm] = useState({ genetic_conditions: '', chronic_diseases: '', allergies: '', notes: '' });
   const [visitNotes, setVisitNotes] = useState({});
@@ -62,41 +61,96 @@ export default function App() {
   const hardResetApp = async () => {
     if ('serviceWorker' in navigator) {
       const registrations = await navigator.serviceWorker.getRegistrations();
-      for (let registration of registrations) { await registration.unregister(); }
+      for (let r of registrations) { await r.unregister(); }
     }
     if ('caches' in window) {
       const cacheNames = await caches.keys();
-      for (let cacheName of cacheNames) { await caches.delete(cacheName); }
+      for (let c of cacheNames) { await caches.delete(c); }
     }
-    localStorage.clear();
-    window.location.reload(true); 
+    localStorage.clear(); window.location.reload(true); 
   };
 
   useEffect(() => {
     const fadeTimer = setTimeout(() => { setSplashState('fading'); }, 2000);
     const hideTimer = setTimeout(() => { setSplashState('hidden'); }, 2500);
+    
+    // Request Push Notification Permissions on Boot
+    if ("Notification" in window && Notification.permission !== "granted" && Notification.permission !== "denied") {
+        Notification.requestPermission();
+    }
     return () => { clearTimeout(fadeTimer); clearTimeout(hideTimer); };
   }, []);
 
-  const getInitials = (name) => {
-    const parts = name.trim().split(' ');
-    if (parts.length >= 2) return (parts[0][0] + parts[1][0]).toUpperCase();
-    return (name.substring(0, 2)).toUpperCase() || 'XX';
-  };
-
   const generateUID = (name, role) => {
-    const initials = getInitials(name);
-    if (role === 'Patient') { return `${initials}${Math.floor(100000 + Math.random() * 900000)}`; } 
-    else { return `D${initials}${Math.floor(1000 + Math.random() * 9000)}`; }
+    const parts = name.trim().split(' ');
+    const initials = parts.length >= 2 ? (parts[0][0] + parts[1][0]).toUpperCase() : (name.substring(0, 2)).toUpperCase();
+    return role === 'Patient' ? `${initials}${Math.floor(100000 + Math.random() * 900000)}` : `D${initials}${Math.floor(1000 + Math.random() * 9000)}`;
   };
 
   useEffect(() => {
     if (user && view === 'loading_session') {
       if (user.role === 'Patient') {
-        setActivePatient(user.real_name); fetchPatientData(user.real_name); fetchPendingRequests(user.uid); fetchFamilyMembers(user.uid);
+        setActivePatient(user.real_name); fetchPatientData(user.real_name); 
+        fetchPendingRequests(user.uid); fetchNotifications(user.uid); fetchFamilyMembers(user.uid);
+        setView('dashboard');
       } else { fetchRoster(user.uid); setView('provider_roster'); }
     }
   }, [user]);
+
+  // --- 📡 BACKGROUND LIVE POLLING ---
+  useEffect(() => {
+    if (!user || user.role !== 'Patient') return;
+    const interval = setInterval(() => {
+        fetchPendingRequests(user.uid);
+        fetchNotifications(user.uid);
+    }, 5000); // Check the server every 5 seconds silently
+    return () => clearInterval(interval);
+  }, [user]);
+
+  const fetchPendingRequests = async (uid) => {
+    try {
+      const res = await fetch(`${BACKEND_URL}/api/connect/pending/${uid}`);
+      if (res.ok) { 
+          const data = await res.json(); 
+          setPendingRequests(data); 
+          
+          // Trigger OS Notification for new Requests
+          if (data.length > prevReqCount.current && prevReqCount.current !== 0) {
+              if (Notification.permission === 'granted') {
+                  new Notification("New Connection Request", { body: `Dr. ${data[data.length-1].doctorName} is requesting chart access.`, icon: '/logo192.png' });
+              }
+          }
+          prevReqCount.current = data.length;
+      }
+    } catch (err) { }
+  };
+
+  const fetchNotifications = async (uid) => {
+    try {
+      const res = await fetch(`${BACKEND_URL}/api/notifications/${uid}`);
+      if (res.ok) { 
+          const data = await res.json(); 
+          setNotifications(data); 
+          
+          // Trigger OS Notification for new Alerts (Uploads, Labs, Rx)
+          if (data.length > prevNotifCount.current && prevNotifCount.current !== 0) {
+              const newest = data[0]; // Backend inserts at index 0
+              if (Notification.permission === 'granted') {
+                  new Notification(newest.title, { body: newest.message, icon: '/logo192.png' });
+              }
+          }
+          prevNotifCount.current = data.length;
+      }
+    } catch (err) { }
+  };
+
+  const handleClearNotifications = async () => {
+      try {
+          await fetch(`${BACKEND_URL}/api/notifications/clear/${user.uid}`, { method: 'POST' });
+          setNotifications([]);
+          prevNotifCount.current = 0;
+      } catch (e) {}
+  };
 
   useEffect(() => {
     if (patientData.profile) { setProfileForm(patientData.profile); }
@@ -116,76 +170,37 @@ export default function App() {
 
   const handleAddFamilyMember = async (e) => {
     e.preventDefault();
-    if (!newFamilyMember.username || !newFamilyMember.password) {
-      alert("Please provide a username and password so they can log in.");
-      return;
-    }
+    if (!newFamilyMember.username || !newFamilyMember.password) return alert("Please provide a username and password.");
     const childUid = generateUID(newFamilyMember.name, 'Patient');
     try {
       const res = await fetch(`${BACKEND_URL}/api/family/add`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-          parent_uid: user.uid, 
-          name: newFamilyMember.name, 
-          age: parseInt(newFamilyMember.age), 
-          gender: newFamilyMember.gender, 
-          child_uid: childUid,
-          username: newFamilyMember.username, 
-          password: newFamilyMember.password  
-        })
+        body: JSON.stringify({ parent_uid: user.uid, name: newFamilyMember.name, age: parseInt(newFamilyMember.age), gender: newFamilyMember.gender, child_uid: childUid, username: newFamilyMember.username, password: newFamilyMember.password })
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.detail);
-      
-      alert(data.message);
-      fetchFamilyMembers(user.uid);
-      setNewFamilyMember({ name: '', age: '', gender: 'Male', username: '', password: '' });
-      setView('dashboard');
+      alert(data.message); fetchFamilyMembers(user.uid); setNewFamilyMember({ name: '', age: '', gender: 'Male', username: '', password: '' }); setView('dashboard');
     } catch (err) { alert(err.message || "Failed to add family member."); }
   };
 
   const handleSmartScan = async (file) => {
-    const formData = new FormData(); 
-    formData.append('file', file);
-    if (user && user.role === 'Provider') { formData.append('provider_uid', user.uid); }
-    if (user && user.role === 'Patient') { formData.append('patient_uid', user.uid); }
-    
+    const formData = new FormData(); formData.append('file', file);
+    if (user.role === 'Provider') { formData.append('provider_uid', user.uid); } else { formData.append('patient_uid', user.uid); }
     try {
-        const res = await fetch(`${BACKEND_URL}/api/predict-patient`, { method: 'POST', body: formData });
-        const data = await res.json(); 
-        setIsScanning(false);
-        if (data.matched_patient) {
-            setScanModal({ type: 'file', patient: data.matched_patient, payload: file });
-        } else { 
-            setScanModal({ type: 'error', message: `Smart Scan couldn't find a matching patient from your ${user.role === 'Provider' ? 'roster' : 'family group'} in this document.` });
-            setView(user.role === 'Provider' ? 'provider_roster' : 'dashboard');
-        }
-    } catch (err) { 
-        setIsScanning(false); setScanModal({ type: 'error', message: "Smart Scan failed to connect to the backend server." }); 
-        setView(user.role === 'Provider' ? 'provider_roster' : 'dashboard');
-    }
+        const res = await fetch(`${BACKEND_URL}/api/predict-patient`, { method: 'POST', body: formData }); const data = await res.json(); setIsScanning(false);
+        if (data.matched_patient) { setScanModal({ type: 'file', patient: data.matched_patient, payload: file }); } 
+        else { setScanModal({ type: 'error', message: `Smart Scan couldn't find a matching patient in this document.` }); setView(user.role === 'Provider' ? 'provider_roster' : 'dashboard'); }
+    } catch (err) { setIsScanning(false); setScanModal({ type: 'error', message: "Smart Scan failed." }); setView(user.role === 'Provider' ? 'provider_roster' : 'dashboard'); }
   };
 
   const handleTextSmartScan = async (textString) => {
-    const formData = new FormData();
-    formData.append('text_payload', textString);
-    if (user && user.role === 'Provider') { formData.append('provider_uid', user.uid); }
-    if (user && user.role === 'Patient') { formData.append('patient_uid', user.uid); } 
-    
+    const formData = new FormData(); formData.append('text_payload', textString);
+    if (user.role === 'Provider') { formData.append('provider_uid', user.uid); } else { formData.append('patient_uid', user.uid); } 
     try {
-        const res = await fetch(`${BACKEND_URL}/api/predict-patient`, { method: 'POST', body: formData });
-        const data = await res.json();
-        setIsScanning(false);
-        if (data.matched_patient) {
-            setScanModal({ type: 'text', patient: data.matched_patient, payload: textString });
-        } else {
-            setScanModal({ type: 'error', message: `No matching patient found in your ${user.role === 'Provider' ? 'roster' : 'family group'} for the shared text:\n\n"${textString}"` });
-            setView(user.role === 'Provider' ? 'provider_roster' : 'dashboard');
-        }
-    } catch (e) {
-        setIsScanning(false); setScanModal({ type: 'error', message: "Text processing failed to connect to the backend server." }); 
-        setView(user.role === 'Provider' ? 'provider_roster' : 'dashboard');
-    }
+        const res = await fetch(`${BACKEND_URL}/api/predict-patient`, { method: 'POST', body: formData }); const data = await res.json(); setIsScanning(false);
+        if (data.matched_patient) { setScanModal({ type: 'text', patient: data.matched_patient, payload: textString }); } 
+        else { setScanModal({ type: 'error', message: `No matching patient found for the shared text.` }); setView(user.role === 'Provider' ? 'provider_roster' : 'dashboard'); }
+    } catch (e) { setIsScanning(false); setScanModal({ type: 'error', message: "Text processing failed." }); setView(user.role === 'Provider' ? 'provider_roster' : 'dashboard'); }
   };
 
   const confirmScanModal = async () => {
@@ -198,9 +213,8 @@ export default function App() {
                   body: JSON.stringify({ target_patient: scanModal.patient, visit_date: dateStr, note: `[Shared Text Message]:\n${scanModal.payload}`, provider_name: user?.real_name || "Unknown Provider" }) 
               });
               fetchPatientData(scanModal.patient);
-          } catch(e) { console.error(e); }
-      } 
-      else if (scanModal.type === 'file') { processDocumentUpload(scanModal.payload, scanModal.patient); }
+          } catch(e) { }
+      } else if (scanModal.type === 'file') { processDocumentUpload(scanModal.payload, scanModal.patient); }
       setScanModal(null);
   };
 
@@ -212,53 +226,26 @@ export default function App() {
       (async () => {
         const cache = await caches.open('shared-files-cache'); 
         const target = activePatient || (user.role === 'Patient' ? user.real_name : '');
-        
         const cachedFile = await cache.match('/latest-shared-file');
         const cachedText = await cache.match('/latest-shared-text');
 
         if (cachedFile) {
           const blob = await cachedFile.blob();
           const file = new File([blob], cachedFile.headers.get('X-File-Name') || 'shared_document.pdf', { type: blob.type });
-          handleSmartScan(file); 
-          await cache.delete('/latest-shared-file');
-        }
-        else if (cachedText) {
+          handleSmartScan(file); await cache.delete('/latest-shared-file');
+        } else if (cachedText) {
           const sharedTextString = await cachedText.text();
-          handleTextSmartScan(sharedTextString); 
-          await cache.delete('/latest-shared-text'); 
+          handleTextSmartScan(sharedTextString); await cache.delete('/latest-shared-text'); 
         } else {
-          setIsScanning(false);
-          setScanModal({ type: 'error', message: "The share was intercepted, but the payload was completely empty." });
+          setIsScanning(false); setScanModal({ type: 'error', message: "The share was intercepted, but the payload was empty." });
         }
         window.history.replaceState({}, document.title, "/");
       })();
     }
   }, [user, activePatient]); 
 
-  useEffect(() => {
-    if ('launchQueue' in window) {
-      window.launchQueue.setConsumer(async (launchParams) => {
-        if (!launchParams.files || launchParams.files.length === 0) return;
-        try {
-          const fileHandle = launchParams.files[0]; const file = await fileHandle.getFile();
-          handleSmartScan(file);
-        } catch (err) { alert("Failed to process external file access."); }
-      });
-    }
-  }, [user, activePatient]);
-
   const fetchRoster = async (uid) => {
-    try {
-      const res = await fetch(`${BACKEND_URL}/api/roster/${uid}`);
-      if (res.ok) { const data = await res.json(); setProviderRoster(data); }
-    } catch (err) { console.error("Failed to fetch roster", err); }
-  };
-
-  const fetchPendingRequests = async (uid) => {
-    try {
-      const res = await fetch(`${BACKEND_URL}/api/connect/pending/${uid}`);
-      if (res.ok) { const data = await res.json(); setPendingRequests(data); }
-    } catch (err) { console.error("Failed to fetch requests", err); }
+    try { const res = await fetch(`${BACKEND_URL}/api/roster/${uid}`); if (res.ok) { const data = await res.json(); setProviderRoster(data); } } catch (err) { }
   };
 
   const handleLogin = async (e) => {
@@ -269,15 +256,12 @@ export default function App() {
       const data = await res.json();
       if (!data.uid) data.uid = generateUID(data.real_name, data.role);
       setTimeout(() => {
-        setIsLoading(false); 
-        setUser(data); 
-        localStorage.setItem('cliniport_user', JSON.stringify(data)); 
-        setIsIdUnlocked(false);
+        setIsLoading(false); setUser(data); localStorage.setItem('cliniport_user', JSON.stringify(data)); setIsIdUnlocked(false);
         if (data.role === 'Patient') {
-          setActivePatient(data.real_name); fetchPatientData(data.real_name); fetchPendingRequests(data.uid); fetchFamilyMembers(data.uid); setView('dashboard');
+          setActivePatient(data.real_name); fetchPatientData(data.real_name); fetchPendingRequests(data.uid); fetchNotifications(data.uid); fetchFamilyMembers(data.uid); setView('dashboard');
         } else { fetchRoster(data.uid); setView('provider_roster'); }
       }, 800);
-    } catch (err) { setIsLoading(false); if (err.message === "Failed to fetch") setAuthError("Cannot connect to cloud server."); else setAuthError(err.message); }
+    } catch (err) { setIsLoading(false); setAuthError(err.message === "Failed to fetch" ? "Cannot connect to cloud server." : err.message); }
   };
 
   const handleRegister = async (e) => {
@@ -286,14 +270,11 @@ export default function App() {
     try {
       const res = await fetch(`${BACKEND_URL}/api/register`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-            username, password, real_name: regName, role: regRole, uid: generatedUID, age: regRole === 'Patient' ? parseInt(regAge) : null, gender: regRole === 'Patient' ? regGender : null,
-            email: regRole === 'Patient' ? regEmail : null, phone: regRole === 'Patient' ? regPhone : null, street_address: regRole === 'Patient' ? regStreet : null, state: regRole === 'Patient' ? regState : null, country: regRole === 'Patient' ? regCountry : null,
-        })
+        body: JSON.stringify({ username, password, real_name: regName, role: regRole, uid: generatedUID, age: regRole === 'Patient' ? parseInt(regAge) : null, gender: regRole === 'Patient' ? regGender : null, email: regRole === 'Patient' ? regEmail : null, phone: regRole === 'Patient' ? regPhone : null })
       });
       if (!res.ok) throw new Error("Username already exists.");
-      setTimeout(() => { setIsLoading(false); alert(`Account created successfully!\n\nIMPORTANT: Your CliniPort ID is: ${generatedUID}\n\nPlease save this ID.`); setView('login'); setPassword(''); }, 800);
-    } catch (err) { setIsLoading(false); if (err.message === "Failed to fetch") setAuthError("Cannot connect to cloud server."); else setAuthError(err.message); }
+      setTimeout(() => { setIsLoading(false); alert(`Account created!\n\nYour CliniPort ID is: ${generatedUID}`); setView('login'); setPassword(''); }, 800);
+    } catch (err) { setIsLoading(false); setAuthError(err.message); }
   };
 
   const handleUnlockId = async (e) => {
@@ -338,7 +319,7 @@ export default function App() {
       const res = await fetch(`${BACKEND_URL}/api/upload`, { method: 'POST', body: formData }); const data = await res.json();
       if (data.status === 'warning') { const proceed = window.confirm(`An encounter record already exists for today. Append document for ${target}?`); if (proceed) { processDocumentUpload(file, target, 'true'); } return; }
       fetchPatientData(target); 
-    } catch(err) { alert("Upload failed. Ensure backend cloud server is running."); }
+    } catch(err) { alert("Upload failed."); }
   };
 
   const handleFileUpload = async (e) => {
@@ -349,50 +330,39 @@ export default function App() {
   };
 
   const handleSaveProfile = async () => {
-    const target = activePatient;
-    try { const res = await fetch(`${BACKEND_URL}/api/profile`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ target_patient: target, ...profileForm }) }); const data = await res.json(); alert(data.message); setIsEditingProfile(false); fetchPatientData(target); } catch (err) { alert("Failed to update profile."); }
+    try { const res = await fetch(`${BACKEND_URL}/api/profile`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ target_patient: activePatient, ...profileForm }) }); const data = await res.json(); alert(data.message); setIsEditingProfile(false); fetchPatientData(activePatient); } catch (err) { alert("Failed to update profile."); }
   };
 
   const handleSaveVisitNote = async (date) => {
-    const target = activePatient;
     try { 
-        const res = await fetch(`${BACKEND_URL}/api/visit/note`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ target_patient: target, visit_date: date, note: visitNotes[date], provider_name: user?.real_name || "Unknown Provider" }) }); 
-        const data = await res.json(); alert(data.message); fetchPatientData(target); 
+        const res = await fetch(`${BACKEND_URL}/api/visit/note`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ target_patient: activePatient, visit_date: date, note: visitNotes[date], provider_name: user?.real_name || "Unknown Provider" }) }); 
+        const data = await res.json(); alert(data.message); fetchPatientData(activePatient); 
     } catch (err) { alert("Failed to save note."); }
   };
 
   const handleLogVitals = async (e) => {
-    e.preventDefault(); const target = activePatient;
-    if (!vitalsInput.height || !vitalsInput.weight) return alert("Enter height and weight.");
-    try { const res = await fetch(`${BACKEND_URL}/api/vitals`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ target_patient: target, height_cm: parseFloat(vitalsInput.height), weight_kg: parseFloat(vitalsInput.weight) }) }); const data = await res.json(); alert(data.message); setVitalsInput({ height: '', weight: '' }); fetchPatientData(target); } catch (err) { alert("Failed to log vitals."); }
+    e.preventDefault(); if (!vitalsInput.height || !vitalsInput.weight) return alert("Enter height and weight.");
+    try { const res = await fetch(`${BACKEND_URL}/api/vitals`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ target_patient: activePatient, height_cm: parseFloat(vitalsInput.height), weight_kg: parseFloat(vitalsInput.weight) }) }); const data = await res.json(); alert(data.message); setVitalsInput({ height: '', weight: '' }); fetchPatientData(activePatient); } catch (err) { alert("Failed to log vitals."); }
   };
 
   const handleAddPrescription = async (e) => {
-    e.preventDefault(); const target = activePatient;
-    if (!prescriptionInput.medication_name) return alert("Enter medication name.");
-    try { const res = await fetch(`${BACKEND_URL}/api/prescriptions`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ target_patient: target, ...prescriptionInput }) }); const data = await res.json(); alert(data.message); setPrescriptionInput({ medication_name: '', dosage: '', instructions: '' }); fetchPatientData(target); } catch (err) { alert("Failed to add prescription."); }
+    e.preventDefault(); if (!prescriptionInput.medication_name) return alert("Enter medication name.");
+    try { const res = await fetch(`${BACKEND_URL}/api/prescriptions`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ target_patient: activePatient, ...prescriptionInput }) }); const data = await res.json(); alert(data.message); setPrescriptionInput({ medication_name: '', dosage: '', instructions: '' }); fetchPatientData(activePatient); } catch (err) { alert("Failed to add prescription."); }
   };
 
   const handleAddOrder = async (e) => {
-    e.preventDefault(); const target = activePatient;
-    if (!orderInput.test_name) return alert("Enter a test name.");
-    try { const res = await fetch(`${BACKEND_URL}/api/orders`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ target_patient: target, ...orderInput }) }); const data = await res.json(); alert(data.message); setOrderInput({ test_name: '', reason: '' }); fetchPatientData(target); } catch (err) { alert("Failed to place order."); }
-  };
-
-  const calculateProjectedHeight = () => {
-      const mom = parseFloat(parentsHeight.mom); const dad = parseFloat(parentsHeight.dad);
-      if (!mom || !dad) return alert("Enter both parents' heights in cm.");
-      const midParental = (mom + dad) / 2; setPredictedHeight({ boy: (midParental + 6.5).toFixed(1), girl: (midParental - 6.5).toFixed(1) });
+    e.preventDefault(); if (!orderInput.test_name) return alert("Enter a test name.");
+    try { const res = await fetch(`${BACKEND_URL}/api/orders`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ target_patient: activePatient, ...orderInput }) }); const data = await res.json(); alert(data.message); setOrderInput({ test_name: '', reason: '' }); fetchPatientData(activePatient); } catch (err) { alert("Failed to place order."); }
   };
 
   const handleCategoryClick = (category) => {
     setActiveCategory(category); if (patientData.categories[category] && patientData.categories[category].length > 0) { setSelectedTestName(patientData.categories[category][0].test_name); } else { setSelectedTestName(''); }
   };
 
-  const textClass = textSize === 'large' ? 'text-lg' : 'text-base';
+  const totalUnreadCount = pendingRequests.length + notifications.length;
 
   return (
-    <div className={`min-h-screen bg-slate-50 text-slate-800 font-sans ${textClass}`}>
+    <div className={`min-h-screen bg-slate-50 text-slate-800 font-sans ${textSize === 'large' ? 'text-lg' : 'text-base'}`}>
       <style>{`@keyframes dropIn { 0% { transform: translateY(-100vh) scaleY(1.5); opacity: 0; } 60% { opacity: 1; } 100% { transform: translateY(0) scale(1); opacity: 1; } } @keyframes splashOut { 0% { transform: scale(0); opacity: 0.8; } 100% { transform: scale(25); opacity: 0; display: none; } } .liquid-drop { animation: dropIn 0.6s cubic-bezier(0.25, 1, 0.5, 1) forwards; } .liquid-ripple-1 { animation: splashOut 1.2s cubic-bezier(0.1, 0.8, 0.3, 1) forwards; animation-delay: 0.5s; } .liquid-ripple-2 { animation: splashOut 1.2s cubic-bezier(0.1, 0.8, 0.3, 1) forwards; animation-delay: 0.65s; }`}</style>
       
       {splashState !== 'hidden' && (
@@ -433,14 +403,7 @@ export default function App() {
                   </select>
                   {regRole === 'Patient' && (
                     <div className="space-y-4">
-                      <div className="flex flex-col sm:flex-row gap-2">
-                          <input type="number" placeholder="Age" required className="w-full sm:w-1/3 p-3 border border-slate-200 rounded-lg bg-slate-50 focus:ring-2 focus:ring-emerald-500 outline-none" value={regAge} onChange={e => setRegAge(e.target.value)} />
-                          <select className="w-full sm:w-2/3 p-3 border border-slate-200 rounded-lg bg-slate-50 focus:ring-2 focus:ring-emerald-500 outline-none" value={regGender} onChange={e => setRegGender(e.target.value)}><option value="Male">Male</option><option value="Female">Female</option><option value="Other">Other</option></select>
-                      </div>
-                      <div className="flex flex-col sm:flex-row gap-2">
-                          <input type="email" placeholder="Email" required className="w-full sm:w-1/2 p-3 border border-slate-200 rounded-lg bg-slate-50" value={regEmail} onChange={e => setRegEmail(e.target.value)} />
-                          <input type="tel" placeholder="Phone" required className="w-full sm:w-1/2 p-3 border border-slate-200 rounded-lg bg-slate-50" value={regPhone} onChange={e => setRegPhone(e.target.value)} />
-                      </div>
+                      <div className="flex flex-col sm:flex-row gap-2"><input type="number" placeholder="Age" required className="w-full sm:w-1/3 p-3 border border-slate-200 rounded-lg bg-slate-50 focus:ring-2 focus:ring-emerald-500 outline-none" value={regAge} onChange={e => setRegAge(e.target.value)} /><select className="w-full sm:w-2/3 p-3 border border-slate-200 rounded-lg bg-slate-50 focus:ring-2 focus:ring-emerald-500 outline-none" value={regGender} onChange={e => setRegGender(e.target.value)}><option value="Male">Male</option><option value="Female">Female</option><option value="Other">Other</option></select></div>
                     </div>
                   )}
                   <input type="text" placeholder="Choose Username" required className="w-full p-3 border border-slate-200 rounded-lg bg-slate-50 mt-4 focus:ring-2 focus:ring-emerald-500 outline-none" value={username} onChange={e => setUsername(e.target.value)} />
@@ -490,7 +453,7 @@ export default function App() {
               </div>
               <hr className="mb-4 border-slate-100" />
 
-              {/* --- 👨‍👩‍👧‍👦 FAMILY SIDEBAR FOR PATIENTS (WITH VISIBLE IDs) --- */}
+              {/* --- 👨‍👩‍👧‍👦 FAMILY SIDEBAR --- */}
               {user.role === 'Patient' && (
                 <div className="mb-4">
                   <p className="text-xs text-slate-400 font-bold uppercase tracking-wider mb-2 px-1">My Family & Dependents</p>
@@ -502,10 +465,7 @@ export default function App() {
                               <span className={activePatient === member.name ? 'font-bold' : ''}>{member.name}</span>
                               {member.name === user.real_name && <span className="text-[10px] bg-blue-100 text-blue-600 px-2 py-0.5 rounded-full font-bold">Me</span>}
                           </div>
-                          {/* 🚨 THE CRUCIAL FIX: SHOW THE ID TO THE PARENT */}
-                          {member.name !== user.real_name && (
-                              <span className="text-[10px] font-mono text-slate-400 mt-0.5">ID: {member.uid}</span>
-                          )}
+                          {member.name !== user.real_name && (<span className="text-[10px] font-mono text-slate-400 mt-0.5">ID: {member.uid}</span>)}
                         </button>
                       </li>
                     ))}
@@ -522,13 +482,17 @@ export default function App() {
                      <li><button onClick={() => setView('provider_search')} className={`w-full text-left p-3 rounded-xl transition flex items-center gap-2 ${view === 'provider_search' ? 'bg-blue-50 text-blue-700 font-bold' : 'hover:bg-slate-50 text-slate-600'}`}><Search size={18}/> Global Database</button></li>
                    </>
                 )}
-                {user.role === 'Patient' && pendingRequests.length > 0 && (
+                
+                {/* 🔔 PERMANENT UNIFIED INBOX BUTTON */}
+                {user.role === 'Patient' && (
                      <li>
                         <button onClick={() => setView('patient_inbox')} className={`w-full text-left p-3 rounded-xl transition flex items-center justify-between ${view === 'patient_inbox' ? 'bg-emerald-50 text-emerald-700 font-bold' : 'hover:bg-slate-50 text-slate-600'}`}>
-                            <span className="flex items-center gap-2"><Inbox size={18}/> Provider Requests</span><span className="bg-red-500 text-white text-xs font-bold px-2 py-0.5 rounded-full">{pendingRequests.length}</span>
+                            <span className="flex items-center gap-2"><Bell size={18}/> Inbox</span>
+                            {totalUnreadCount > 0 && <span className="bg-red-500 text-white text-xs font-bold px-2 py-0.5 rounded-full">{totalUnreadCount}</span>}
                         </button>
                      </li>
                 )}
+                
                 {activePatient && (
                   <li><button onClick={() => setView('upload')} className={`w-full text-left p-3 rounded-xl transition flex items-center gap-2 ${view === 'upload' ? 'bg-blue-50 text-blue-700 font-bold' : 'hover:bg-slate-50 text-slate-600'}`}><Upload size={18}/> Upload Document</button></li>
                 )}
@@ -547,12 +511,10 @@ export default function App() {
                         <div className="flex-1"><label className="text-sm font-bold text-slate-700">Age</label><input type="number" required value={newFamilyMember.age} onChange={e => setNewFamilyMember({...newFamilyMember, age: e.target.value})} className="w-full p-3 border border-slate-200 rounded-lg bg-slate-50 mt-1 focus:ring-2 focus:ring-emerald-500 outline-none" /></div>
                         <div className="flex-1"><label className="text-sm font-bold text-slate-700">Gender</label><select value={newFamilyMember.gender} onChange={e => setNewFamilyMember({...newFamilyMember, gender: e.target.value})} className="w-full p-3 border border-slate-200 rounded-lg bg-slate-50 mt-1 focus:ring-2 focus:ring-emerald-500 outline-none"><option value="Male">Male</option><option value="Female">Female</option><option value="Other">Other</option></select></div>
                       </div>
-                      
                       <hr className="border-slate-200 my-2" />
                       <p className="text-xs font-bold text-slate-400 uppercase">Login Credentials</p>
                       <div><input type="text" placeholder="Assign a Username" required value={newFamilyMember.username} onChange={e => setNewFamilyMember({...newFamilyMember, username: e.target.value})} className="w-full p-3 border border-slate-200 rounded-lg bg-slate-50 focus:ring-2 focus:ring-emerald-500 outline-none" /></div>
                       <div><input type="password" placeholder="Assign a Password" required value={newFamilyMember.password} onChange={e => setNewFamilyMember({...newFamilyMember, password: e.target.value})} className="w-full p-3 border border-slate-200 rounded-lg bg-slate-50 focus:ring-2 focus:ring-emerald-500 outline-none" /></div>
-
                       <button type="submit" className="w-full bg-emerald-600 text-white font-bold py-3 rounded-xl hover:bg-emerald-700 transition shadow-sm mt-4">Create Managed Account</button>
                    </form>
                  </div>
@@ -570,7 +532,7 @@ export default function App() {
                     <div>
                         <h3 className="text-lg font-bold text-slate-800 mb-4">My Assigned Patients</h3>
                         {providerRoster.length === 0 ? (
-                            <div className="bg-white p-12 text-center rounded-2xl border border-slate-100 border-dashed"><Users size={48} className="text-slate-300 mx-auto mb-4"/><p className="text-slate-500 font-medium">Your roster is currently empty.</p><p className="text-sm text-slate-400 mt-1">Connect with a patient using their ID above to begin.</p></div>
+                            <div className="bg-white p-12 text-center rounded-2xl border border-slate-100 border-dashed"><Users size={48} className="text-slate-300 mx-auto mb-4"/><p className="text-slate-500 font-medium">Your roster is currently empty.</p></div>
                         ) : (
                             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                                 {providerRoster.map((pt, i) => (
@@ -585,28 +547,51 @@ export default function App() {
                  </div>
               )}
 
+              {/* --- 🔔 THE NEW UNIFIED INBOX VIEW --- */}
               {view === 'patient_inbox' && (
-                 <div className="bg-white p-6 md:p-10 rounded-2xl shadow-sm border border-slate-100 animate-in fade-in slide-in-from-bottom-4 duration-500">
-                   <h3 className="text-xl font-bold mb-6 flex items-center gap-2"><Inbox className="text-emerald-600"/> Provider Connection Requests</h3>
-                   {pendingRequests.length === 0 ? ( <p className="text-slate-500 text-center py-8">No pending requests.</p> ) : (
-                       <div className="space-y-4">
-                           {pendingRequests.map((req, i) => (
-                               <div key={i} className="flex flex-col sm:flex-row justify-between items-center bg-slate-50 p-4 rounded-xl border border-slate-200 gap-4">
-                                   <div>
-                                       <p className="font-bold text-slate-800 text-lg">Dr. {req.doctorName}</p>
-                                       <p className="text-sm text-slate-500 font-mono">Provider ID: {req.doctorId}</p>
-                                       {/* 🚨 THE CRUCIAL FIX: IDENTIFY THE TARGET DEPENDENT AND ID */}
-                                       {req.target_member && req.target_member !== user.real_name && (
-                                           <p className="text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded inline-block mt-2">
-                                              Requesting access to: <strong>{req.target_member}</strong> <span className="font-mono opacity-75">({req.target_uid})</span>
-                                           </p>
-                                       )}
+                 <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
+                     
+                     {/* Section 1: Urgent Action Items */}
+                     <div className="bg-white p-6 md:p-8 rounded-2xl shadow-sm border border-slate-100">
+                       <h3 className="text-xl font-bold mb-6 flex items-center gap-2"><UserPlus className="text-blue-600"/> Action Required</h3>
+                       {pendingRequests.length === 0 ? ( <p className="text-slate-500 py-4">No pending provider requests.</p> ) : (
+                           <div className="space-y-4">
+                               {pendingRequests.map((req, i) => (
+                                   <div key={i} className="flex flex-col sm:flex-row justify-between items-center bg-blue-50 p-4 rounded-xl border border-blue-100 gap-4 shadow-sm">
+                                       <div>
+                                           <p className="font-bold text-slate-800 text-lg">Dr. {req.doctorName} <span className="text-sm font-normal text-slate-500">(ID: {req.doctorId})</span></p>
+                                           <p className="text-sm text-blue-800 mt-1">is requesting access to a chart.</p>
+                                           {req.target_member && req.target_member !== user.real_name && (
+                                               <p className="text-xs bg-white text-blue-700 px-2 py-1 rounded border border-blue-200 inline-block mt-2 font-bold shadow-sm">Target Patient: {req.target_member}</p>
+                                           )}
+                                       </div>
+                                       <div className="flex gap-2 w-full sm:w-auto mt-3 sm:mt-0"><button onClick={() => setPendingRequests(prev => prev.filter(r => r.doctorId !== req.doctorId))} className="flex-1 sm:flex-none bg-white border border-slate-300 text-slate-600 px-4 py-2 font-bold rounded-lg hover:bg-slate-100">Decline</button><button onClick={() => handleAcceptRequest(req)} className="flex-1 sm:flex-none bg-blue-600 text-white px-6 py-2 font-bold rounded-lg hover:bg-blue-700 shadow-sm">Authorize</button></div>
                                    </div>
-                                   <div className="flex gap-2 w-full sm:w-auto mt-3 sm:mt-0"><button onClick={() => setPendingRequests(prev => prev.filter(r => r.doctorId !== req.doctorId))} className="flex-1 sm:flex-none bg-white border border-slate-300 text-slate-600 px-4 py-2 font-bold rounded-lg hover:bg-slate-100">Decline</button><button onClick={() => handleAcceptRequest(req)} className="flex-1 sm:flex-none bg-emerald-600 text-white px-6 py-2 font-bold rounded-lg hover:bg-emerald-700 shadow-sm">Authorize</button></div>
-                               </div>
-                           ))}
+                               ))}
+                           </div>
+                       )}
+                     </div>
+
+                     {/* Section 2: Recent Activity Alerts */}
+                     <div className="bg-white p-6 md:p-8 rounded-2xl shadow-sm border border-slate-100">
+                       <div className="flex justify-between items-center mb-6">
+                           <h3 className="text-xl font-bold flex items-center gap-2"><Bell className="text-emerald-600"/> Recent Activity</h3>
+                           {notifications.length > 0 && <button onClick={handleClearNotifications} className="text-sm text-slate-400 hover:text-red-500 flex items-center gap-1 font-bold"><Trash2 size={16}/> Clear All</button>}
                        </div>
-                   )}
+                       {notifications.length === 0 ? ( <p className="text-slate-500 py-4">No recent activity.</p> ) : (
+                           <div className="space-y-3">
+                               {notifications.map((notif, i) => (
+                                   <div key={i} className="flex flex-col bg-slate-50 p-4 rounded-xl border border-slate-200">
+                                       <div className="flex justify-between items-start mb-1">
+                                           <p className="font-bold text-slate-800">{notif.title}</p>
+                                           <span className="text-[10px] text-slate-400 font-mono">{notif.timestamp}</span>
+                                       </div>
+                                       <p className="text-sm text-slate-600">{notif.message}</p>
+                                   </div>
+                               ))}
+                           </div>
+                       )}
+                     </div>
                  </div>
               )}
 

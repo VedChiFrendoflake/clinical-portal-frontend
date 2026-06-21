@@ -40,9 +40,9 @@ export default function App() {
   const [providerRoster, setProviderRoster] = useState([]); 
   const [pendingRequests, setPendingRequests] = useState([]); 
 
-  // --- 👨‍👩‍👧‍👦 FAMILY STATE ---
+  // --- 👨‍👩‍👧‍👦 FAMILY STATE WITH AUTH FIELDS ---
   const [familyMembers, setFamilyMembers] = useState([]);
-  const [newFamilyMember, setNewFamilyMember] = useState({ name: '', age: '', gender: 'Male' });
+  const [newFamilyMember, setNewFamilyMember] = useState({ name: '', age: '', gender: 'Male', username: '', password: '' });
 
   const [isIdUnlocked, setIsIdUnlocked] = useState(false);
   const [unlockPassword, setUnlockPassword] = useState('');
@@ -117,25 +117,39 @@ export default function App() {
 
   const handleAddFamilyMember = async (e) => {
     e.preventDefault();
+    if (!newFamilyMember.username || !newFamilyMember.password) {
+      alert("Please provide a username and password so they can log in.");
+      return;
+    }
     const childUid = generateUID(newFamilyMember.name, 'Patient');
     try {
       const res = await fetch(`${BACKEND_URL}/api/family/add`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ parent_uid: user.uid, name: newFamilyMember.name, age: parseInt(newFamilyMember.age), gender: newFamilyMember.gender, child_uid: childUid })
+        body: JSON.stringify({ 
+          parent_uid: user.uid, 
+          name: newFamilyMember.name, 
+          age: parseInt(newFamilyMember.age), 
+          gender: newFamilyMember.gender, 
+          child_uid: childUid,
+          username: newFamilyMember.username, 
+          password: newFamilyMember.password  
+        })
       });
       const data = await res.json();
+      if (!res.ok) throw new Error(data.detail);
+      
       alert(data.message);
       fetchFamilyMembers(user.uid);
+      setNewFamilyMember({ name: '', age: '', gender: 'Male', username: '', password: '' });
       setView('dashboard');
-    } catch (err) { alert("Failed to add family member."); }
+    } catch (err) { alert(err.message || "Failed to add family member."); }
   };
 
-  // --- 📸 CENTRALIZED FILE SMART SCANNER ---
   const handleSmartScan = async (file) => {
     const formData = new FormData(); 
     formData.append('file', file);
     if (user && user.role === 'Provider') { formData.append('provider_uid', user.uid); }
-    if (user && user.role === 'Patient') { formData.append('patient_uid', user.uid); } // 👈 Patient scoping
+    if (user && user.role === 'Patient') { formData.append('patient_uid', user.uid); }
     
     try {
         const res = await fetch(`${BACKEND_URL}/api/predict-patient`, { method: 'POST', body: formData });
@@ -144,7 +158,7 @@ export default function App() {
         if (data.matched_patient) {
             setScanModal({ type: 'file', patient: data.matched_patient, payload: file });
         } else { 
-            setScanModal({ type: 'error', message: `Smart Scan couldn't find a matching patient from your ${user.role === 'Provider' ? 'roster' : 'family'} in this document.` });
+            setScanModal({ type: 'error', message: `Smart Scan couldn't find a matching patient from your ${user.role === 'Provider' ? 'roster' : 'family group'} in this document.` });
             setView(user.role === 'Provider' ? 'provider_roster' : 'dashboard');
         }
     } catch (err) { 
@@ -153,12 +167,11 @@ export default function App() {
     }
   };
 
-  // --- 📝 TEXT SMART SCANNER ---
   const handleTextSmartScan = async (textString) => {
     const formData = new FormData();
     formData.append('text_payload', textString);
     if (user && user.role === 'Provider') { formData.append('provider_uid', user.uid); }
-    if (user && user.role === 'Patient') { formData.append('patient_uid', user.uid); } // 👈 Patient scoping
+    if (user && user.role === 'Patient') { formData.append('patient_uid', user.uid); } 
     
     try {
         const res = await fetch(`${BACKEND_URL}/api/predict-patient`, { method: 'POST', body: formData });
@@ -167,7 +180,7 @@ export default function App() {
         if (data.matched_patient) {
             setScanModal({ type: 'text', patient: data.matched_patient, payload: textString });
         } else {
-            setScanModal({ type: 'error', message: `No matching patient found in your ${user.role === 'Provider' ? 'roster' : 'family'} for the shared text:\n\n"${textString}"` });
+            setScanModal({ type: 'error', message: `No matching patient found in your ${user.role === 'Provider' ? 'roster' : 'family group'} for the shared text:\n\n"${textString}"` });
             setView(user.role === 'Provider' ? 'provider_roster' : 'dashboard');
         }
     } catch (e) {
@@ -367,6 +380,12 @@ export default function App() {
     try { const res = await fetch(`${BACKEND_URL}/api/orders`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ target_patient: target, ...orderInput }) }); const data = await res.json(); alert(data.message); setOrderInput({ test_name: '', reason: '' }); fetchPatientData(target); } catch (err) { alert("Failed to place order."); }
   };
 
+  const calculateProjectedHeight = () => {
+      const mom = parseFloat(parentsHeight.mom); const dad = parseFloat(parentsHeight.dad);
+      if (!mom || !dad) return alert("Enter both parents' heights in cm.");
+      const midParental = (mom + dad) / 2; setPredictedHeight({ boy: (midParental + 6.5).toFixed(1), girl: (midParental - 6.5).toFixed(1) });
+  };
+
   const handleCategoryClick = (category) => {
     setActiveCategory(category); if (patientData.categories[category] && patientData.categories[category].length > 0) { setSelectedTestName(patientData.categories[category][0].test_name); } else { setSelectedTestName(''); }
   };
@@ -475,7 +494,7 @@ export default function App() {
               {/* --- 👨‍👩‍👧‍👦 FAMILY SIDEBAR FOR PATIENTS --- */}
               {user.role === 'Patient' && (
                 <div className="mb-4">
-                  <p className="text-xs text-slate-400 font-bold uppercase tracking-wider mb-2 px-1">My Family</p>
+                  <p className="text-xs text-slate-400 font-bold uppercase tracking-wider mb-2 px-1">My Family & Dependents</p>
                   <ul className="space-y-1 mb-3">
                     {familyMembers.map((member, idx) => (
                       <li key={idx}>
@@ -486,7 +505,7 @@ export default function App() {
                       </li>
                     ))}
                   </ul>
-                  <button onClick={() => setView('add_family_member')} className={`w-full text-left p-2 rounded-lg transition flex items-center gap-2 text-sm ${view === 'add_family_member' ? 'bg-emerald-50 text-emerald-700 font-bold' : 'text-emerald-600 hover:bg-slate-50'}`}><UserPlus size={16}/> Add Dependent</button>
+                  <button onClick={() => setView('add_family_member')} className={`w-full text-left p-2 rounded-lg transition flex items-center gap-2 text-sm ${view === 'add_family_member' ? 'bg-emerald-50 text-emerald-700 font-bold' : 'text-emerald-600 hover:bg-slate-50'}`}><UserPlus size={16}/> Add Family Member</button>
                   <hr className="my-4 border-slate-100" />
                 </div>
               )}
@@ -513,18 +532,24 @@ export default function App() {
 
             <div className="col-span-1 lg:col-span-3 space-y-6">
 
-              {/* --- 👨‍👩‍👧‍👦 ADD FAMILY MEMBER VIEW --- */}
+              {/* --- 👨‍👩‍👧‍👦 ADD FAMILY MEMBER VIEW (WITH CREDENTIALS) --- */}
               {view === 'add_family_member' && (
                  <div className="bg-white p-6 md:p-10 rounded-2xl shadow-sm border border-slate-100 animate-in fade-in slide-in-from-bottom-4 duration-500 max-w-lg">
-                   <h3 className="text-xl font-bold mb-2 flex items-center gap-2"><UserPlus className="text-emerald-600"/> Add Dependent</h3>
-                   <p className="text-slate-500 text-sm mb-6">Create a managed profile for your family member. Their charts and uploads will be grouped under your primary account.</p>
+                   <h3 className="text-xl font-bold mb-2 flex items-center gap-2"><UserPlus className="text-emerald-600"/> Add Family Member</h3>
+                   <p className="text-slate-500 text-sm mb-6">Create a managed profile for a family member (child, spouse, or senior). They will be able to log in with these credentials, but you can also manage their chart.</p>
                    <form onSubmit={handleAddFamilyMember} className="space-y-4">
                       <div><label className="text-sm font-bold text-slate-700">Full Legal Name</label><input type="text" required value={newFamilyMember.name} onChange={e => setNewFamilyMember({...newFamilyMember, name: e.target.value})} className="w-full p-3 border border-slate-200 rounded-lg bg-slate-50 mt-1 focus:ring-2 focus:ring-emerald-500 outline-none" /></div>
                       <div className="flex gap-4">
                         <div className="flex-1"><label className="text-sm font-bold text-slate-700">Age</label><input type="number" required value={newFamilyMember.age} onChange={e => setNewFamilyMember({...newFamilyMember, age: e.target.value})} className="w-full p-3 border border-slate-200 rounded-lg bg-slate-50 mt-1 focus:ring-2 focus:ring-emerald-500 outline-none" /></div>
                         <div className="flex-1"><label className="text-sm font-bold text-slate-700">Gender</label><select value={newFamilyMember.gender} onChange={e => setNewFamilyMember({...newFamilyMember, gender: e.target.value})} className="w-full p-3 border border-slate-200 rounded-lg bg-slate-50 mt-1 focus:ring-2 focus:ring-emerald-500 outline-none"><option value="Male">Male</option><option value="Female">Female</option><option value="Other">Other</option></select></div>
                       </div>
-                      <button type="submit" className="w-full bg-emerald-600 text-white font-bold py-3 rounded-xl hover:bg-emerald-700 transition shadow-sm mt-4">Create Profile</button>
+                      
+                      <hr className="border-slate-200 my-2" />
+                      <p className="text-xs font-bold text-slate-400 uppercase">Login Credentials</p>
+                      <div><input type="text" placeholder="Assign a Username" required value={newFamilyMember.username} onChange={e => setNewFamilyMember({...newFamilyMember, username: e.target.value})} className="w-full p-3 border border-slate-200 rounded-lg bg-slate-50 focus:ring-2 focus:ring-emerald-500 outline-none" /></div>
+                      <div><input type="password" placeholder="Assign a Password" required value={newFamilyMember.password} onChange={e => setNewFamilyMember({...newFamilyMember, password: e.target.value})} className="w-full p-3 border border-slate-200 rounded-lg bg-slate-50 focus:ring-2 focus:ring-emerald-500 outline-none" /></div>
+
+                      <button type="submit" className="w-full bg-emerald-600 text-white font-bold py-3 rounded-xl hover:bg-emerald-700 transition shadow-sm mt-4">Create Managed Account</button>
                    </form>
                  </div>
               )}
@@ -566,7 +591,6 @@ export default function App() {
                                    <div>
                                        <p className="font-bold text-slate-800 text-lg">Dr. {req.doctorName}</p>
                                        <p className="text-sm text-slate-500 font-mono">Provider ID: {req.doctorId}</p>
-                                       {/* 👨‍👩‍👧‍👦 Tell the primary account who this request is for! */}
                                        {req.target_member && req.target_member !== user.real_name && <p className="text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded inline-block mt-2">Requesting access to: <strong>{req.target_member}</strong></p>}
                                    </div>
                                    <div className="flex gap-2 w-full sm:w-auto mt-3 sm:mt-0"><button onClick={() => setPendingRequests(prev => prev.filter(r => r.doctorId !== req.doctorId))} className="flex-1 sm:flex-none bg-white border border-slate-300 text-slate-600 px-4 py-2 font-bold rounded-lg hover:bg-slate-100">Decline</button><button onClick={() => handleAcceptRequest(req)} className="flex-1 sm:flex-none bg-emerald-600 text-white px-6 py-2 font-bold rounded-lg hover:bg-emerald-700 shadow-sm">Authorize</button></div>
@@ -869,7 +893,6 @@ export default function App() {
         </div>
       )}
 
-      {/* --- 🛎️ IN-APP SCAN CONFIRMATION MODAL --- */}
       {scanModal && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[99999] flex flex-col justify-center items-center px-4 animate-in fade-in duration-300">
           <div className="bg-white p-6 md:p-8 rounded-2xl shadow-2xl max-w-md w-full border border-slate-100 animate-in zoom-in-95 duration-300">
@@ -900,7 +923,6 @@ export default function App() {
         </div>
       )}
 
-      {/* --- AI SMART SCANNER OVERLAY --- */}
       {isScanning && (
         <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-[99999] flex flex-col justify-center items-center text-white px-4 animate-in fade-in duration-300">
           <div className="bg-white p-8 rounded-2xl shadow-2xl flex flex-col items-center max-w-sm w-full text-center border border-slate-100">

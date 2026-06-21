@@ -1,79 +1,43 @@
 const CACHE_NAME = 'clinical-portal-v2';
 const SHARED_CACHE = 'shared-files-cache';
 
-// --- 1. INSTALL & INSTANT TAKEOVER ---
-self.addEventListener('install', (e) => {
-  self.skipWaiting(); // Force the new version to take over immediately
-  e.waitUntil(
-    caches.open(CACHE_NAME).then((cache) => cache.addAll(['/']))
-  );
-});
+self.addEventListener('install', (e) => { self.skipWaiting(); e.waitUntil(caches.open(CACHE_NAME).then((c) => c.addAll(['/']))); });
+self.addEventListener('activate', (e) => { e.waitUntil(caches.keys().then((keys) => Promise.all(keys.map((k) => { if (k !== CACHE_NAME && k !== SHARED_CACHE) return caches.delete(k); }))).then(() => self.clients.claim())); });
 
-// --- 2. CLEAN UP OLD ZOMBIE CACHES ---
-self.addEventListener('activate', (e) => {
-  e.waitUntil(
-    caches.keys().then((cacheNames) => {
-      return Promise.all(
-        cacheNames.map((cacheName) => {
-          // Delete anything that isn't our current version or our shared files
-          if (cacheName !== CACHE_NAME && cacheName !== SHARED_CACHE) {
-            return caches.delete(cacheName);
-          }
-        })
-      );
-    }).then(() => self.clients.claim()) // Claim all open tabs immediately
-  );
-});
-
-// --- 3. FETCH STRATEGIES ---
 self.addEventListener('fetch', (e) => {
-  // A. CATCH ANDROID SHARE FILES (Your existing share logic)
   if (e.request.method === 'POST' && e.request.url.includes('incoming_share=true')) {
     e.respondWith((async () => {
       try {
         const formData = await e.request.formData();
         const file = formData.get('file');
-        const text = formData.get('text');
+        
+        // Android apps share text using completely random field names. Catch them all!
+        const text = formData.get('text') || '';
+        const title = formData.get('title') || '';
+        const subject = formData.get('subject') || '';
+        const url = formData.get('url') || '';
+        
+        // Combine them all together
+        const fullText = [subject, title, text, url].filter(Boolean).join('\n\n');
 
         const cache = await caches.open(SHARED_CACHE);
-        
-        if (file) {
-          await cache.put('/latest-shared-file', new Response(file, {
-            headers: { 'Content-Type': file.type, 'X-File-Name': file.name || 'Shared_Document' }
-          }));
-        }
-        if (text) {
-          await cache.put('/latest-shared-text', new Response(text));
-        }
-      } catch (err) {
-        console.error("Error catching shared item:", err);
-      }
+        if (file) { await cache.put('/latest-shared-file', new Response(file, { headers: { 'Content-Type': file.type, 'X-File-Name': file.name || 'Shared_Document' } })); }
+        if (fullText) { await cache.put('/latest-shared-text', new Response(fullText)); }
+      } catch (err) { console.error(err); }
       return Response.redirect('/?incoming_share=true', 303);
     })());
     return;
   }
 
-  // B. NETWORK-FIRST STRATEGY (Fixes the White Screen!)
-  // For HTML and page navigation, ALWAYS try the internet first.
   if (e.request.mode === 'navigate' || (e.request.headers.get('accept') && e.request.headers.get('accept').includes('text/html'))) {
-    e.respondWith(
-      fetch(e.request).catch(() => caches.match(e.request)) // If offline, fallback to cache
-    );
+    e.respondWith(fetch(e.request).catch(() => caches.match(e.request)));
     return;
   }
 
-  // C. STALE-WHILE-REVALIDATE (For JS, CSS, and Images)
   if (e.request.method === 'GET') {
-    e.respondWith(
-      caches.match(e.request).then((cachedResponse) => {
-        const fetchPromise = fetch(e.request).then((networkResponse) => {
-          caches.open(CACHE_NAME).then((cache) => {
-            cache.put(e.request, networkResponse.clone());
-          });
-          return networkResponse;
-        });
-        return cachedResponse || fetchPromise;
-      })
-    );
+    e.respondWith(caches.match(e.request).then((cRes) => {
+      const fetchPromise = fetch(e.request).then((nRes) => { caches.open(CACHE_NAME).then((c) => { c.put(e.request, nRes.clone()); }); return nRes; });
+      return cRes || fetchPromise;
+    }));
   }
 });

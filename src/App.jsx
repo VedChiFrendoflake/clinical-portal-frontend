@@ -40,7 +40,6 @@ export default function App() {
   const [providerRoster, setProviderRoster] = useState([]); 
   const [pendingRequests, setPendingRequests] = useState([]); 
 
-  // --- 👨‍👩‍👧‍👦 FAMILY STATE WITH AUTH FIELDS ---
   const [familyMembers, setFamilyMembers] = useState([]);
   const [newFamilyMember, setNewFamilyMember] = useState({ name: '', age: '', gender: 'Male', username: '', password: '' });
 
@@ -413,7 +412,7 @@ export default function App() {
             {view === 'login' ? (
               <>
                 <div className="flex justify-center mb-6"><div className="inline-flex items-center justify-center w-16 h-16 bg-blue-600 rounded-full shadow-lg"><ShieldCheck size={32} className="text-white" /></div></div>
-                <h2 className="text-2xl font-bold text-center text-slate-800 mb-2">Clinical Portal</h2><p className="text-center text-slate-500 mb-8">Secure Provider Access</p>
+                <h2 className="text-2xl font-bold text-center text-slate-800 mb-2">Clinical Portal</h2><p className="text-center text-slate-500 mb-8">Secure Access</p>
                 {authError && (<div className="bg-red-50 text-red-600 p-3 rounded-lg text-sm font-bold mb-6 border border-red-100 text-center">{authError}</div>)}
                 <form onSubmit={handleLogin} className="space-y-5">
                   <div><label className="block text-sm font-medium text-slate-700 mb-1">Username</label><input type="text" name="username" placeholder="Enter username" className="w-full p-3 border border-slate-200 rounded-lg bg-slate-50 focus:ring-2 focus:ring-blue-500 outline-none" value={username} onChange={e => setUsername(e.target.value)} /></div>
@@ -491,16 +490,22 @@ export default function App() {
               </div>
               <hr className="mb-4 border-slate-100" />
 
-              {/* --- 👨‍👩‍👧‍👦 FAMILY SIDEBAR FOR PATIENTS --- */}
+              {/* --- 👨‍👩‍👧‍👦 FAMILY SIDEBAR FOR PATIENTS (WITH VISIBLE IDs) --- */}
               {user.role === 'Patient' && (
                 <div className="mb-4">
                   <p className="text-xs text-slate-400 font-bold uppercase tracking-wider mb-2 px-1">My Family & Dependents</p>
                   <ul className="space-y-1 mb-3">
                     {familyMembers.map((member, idx) => (
                       <li key={idx}>
-                        <button onClick={() => { fetchPatientData(member.name); setView('dashboard'); }} className={`w-full text-left p-2 rounded-lg transition flex justify-between items-center text-sm ${activePatient === member.name && view === 'dashboard' ? 'bg-blue-50 text-blue-700 font-bold' : 'hover:bg-slate-50 text-slate-600'}`}>
-                          <span>{member.name}</span>
-                          {member.name === user.real_name && <span className="text-[10px] bg-blue-100 text-blue-600 px-2 py-0.5 rounded-full">Me</span>}
+                        <button onClick={() => { fetchPatientData(member.name); setView('dashboard'); }} className={`w-full text-left p-2 rounded-lg transition flex flex-col justify-center text-sm ${activePatient === member.name && view === 'dashboard' ? 'bg-blue-50 text-blue-700' : 'hover:bg-slate-50 text-slate-600'}`}>
+                          <div className="flex justify-between items-center w-full">
+                              <span className={activePatient === member.name ? 'font-bold' : ''}>{member.name}</span>
+                              {member.name === user.real_name && <span className="text-[10px] bg-blue-100 text-blue-600 px-2 py-0.5 rounded-full font-bold">Me</span>}
+                          </div>
+                          {/* 🚨 THE CRUCIAL FIX: SHOW THE ID TO THE PARENT */}
+                          {member.name !== user.real_name && (
+                              <span className="text-[10px] font-mono text-slate-400 mt-0.5">ID: {member.uid}</span>
+                          )}
                         </button>
                       </li>
                     ))}
@@ -532,7 +537,6 @@ export default function App() {
 
             <div className="col-span-1 lg:col-span-3 space-y-6">
 
-              {/* --- 👨‍👩‍👧‍👦 ADD FAMILY MEMBER VIEW (WITH CREDENTIALS) --- */}
               {view === 'add_family_member' && (
                  <div className="bg-white p-6 md:p-10 rounded-2xl shadow-sm border border-slate-100 animate-in fade-in slide-in-from-bottom-4 duration-500 max-w-lg">
                    <h3 className="text-xl font-bold mb-2 flex items-center gap-2"><UserPlus className="text-emerald-600"/> Add Family Member</h3>
@@ -591,7 +595,12 @@ export default function App() {
                                    <div>
                                        <p className="font-bold text-slate-800 text-lg">Dr. {req.doctorName}</p>
                                        <p className="text-sm text-slate-500 font-mono">Provider ID: {req.doctorId}</p>
-                                       {req.target_member && req.target_member !== user.real_name && <p className="text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded inline-block mt-2">Requesting access to: <strong>{req.target_member}</strong></p>}
+                                       {/* 🚨 THE CRUCIAL FIX: IDENTIFY THE TARGET DEPENDENT AND ID */}
+                                       {req.target_member && req.target_member !== user.real_name && (
+                                           <p className="text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded inline-block mt-2">
+                                              Requesting access to: <strong>{req.target_member}</strong> <span className="font-mono opacity-75">({req.target_uid})</span>
+                                           </p>
+                                       )}
                                    </div>
                                    <div className="flex gap-2 w-full sm:w-auto mt-3 sm:mt-0"><button onClick={() => setPendingRequests(prev => prev.filter(r => r.doctorId !== req.doctorId))} className="flex-1 sm:flex-none bg-white border border-slate-300 text-slate-600 px-4 py-2 font-bold rounded-lg hover:bg-slate-100">Decline</button><button onClick={() => handleAcceptRequest(req)} className="flex-1 sm:flex-none bg-emerald-600 text-white px-6 py-2 font-bold rounded-lg hover:bg-emerald-700 shadow-sm">Authorize</button></div>
                                </div>

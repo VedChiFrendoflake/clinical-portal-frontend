@@ -7,7 +7,6 @@ const BACKEND_URL = "https://clinical-portal-backend-production.up.railway.app";
 export default function App() {
   const [splashState, setSplashState] = useState('visible');
   
-  // --- 💾 PERSISTED USER STATE ---
   const [user, setUser] = useState(() => {
     const savedUser = localStorage.getItem('cliniport_user');
     return savedUser ? JSON.parse(savedUser) : null;
@@ -37,20 +36,20 @@ export default function App() {
   const [searchQuery, setSearchQuery] = useState('');
   const [dashTab, setDashTab] = useState('profile'); 
 
-  // --- CONNECTION & ROSTER STATE ---
   const [connectIdInput, setConnectIdInput] = useState('');
   const [providerRoster, setProviderRoster] = useState([]); 
   const [pendingRequests, setPendingRequests] = useState([]); 
 
-  // --- 🔐 SECURE ID UNLOCK STATE ---
+  // --- 👨‍👩‍👧‍👦 FAMILY STATE ---
+  const [familyMembers, setFamilyMembers] = useState([]);
+  const [newFamilyMember, setNewFamilyMember] = useState({ name: '', age: '', gender: 'Male' });
+
   const [isIdUnlocked, setIsIdUnlocked] = useState(false);
   const [unlockPassword, setUnlockPassword] = useState('');
   const [unlockError, setUnlockError] = useState('');
   const [isUnlocking, setIsUnlocking] = useState(false);
 
-  // --- 🛎️ IN-APP DIALOG STATE ---
   const [scanModal, setScanModal] = useState(null); 
-
   const [vitalsInput, setVitalsInput] = useState({ height: '', weight: '' });
   const [parentsHeight, setParentsHeight] = useState({ mom: '', dad: '' });
   const [predictedHeight, setPredictedHeight] = useState(null);
@@ -61,7 +60,6 @@ export default function App() {
   const [orderInput, setOrderInput] = useState({ test_name: '', reason: '' });
   const [isScanning, setIsScanning] = useState(false);
 
-  // --- 💣 THE CACHE NUKE ---
   const hardResetApp = async () => {
     if ('serviceWorker' in navigator) {
       const registrations = await navigator.serviceWorker.getRegistrations();
@@ -94,30 +92,9 @@ export default function App() {
   };
 
   useEffect(() => {
-    const userLang = navigator.language || navigator.userLanguage;
-    const baseLang = userLang.split('-')[0];
-    if (baseLang !== 'en') {
-      document.cookie = `googtrans=/en/${baseLang}; path=/;`;
-      document.cookie = `googtrans=/en/${baseLang}; domain=.${window.location.hostname}; path=/;`;
-    }
-    if (!document.getElementById('google-translate-script')) {
-      const script = document.createElement('script');
-      script.id = 'google-translate-script';
-      script.src = '//translate.google.com/translate_a/element.js?cb=googleTranslateElementInit';
-      document.body.appendChild(script);
-      window.googleTranslateElementInit = () => {
-        new window.google.translate.TranslateElement({
-          pageLanguage: 'en', includedLanguages: 'en,es,fr,de,zh-CN,ar,ru,pt,ja,ko,hi,bn,mr,te,ta,gu,ur,kn,or,ml,pa,as,mai,sat,ks,ne,sd,doi,sa,bho,awa,brx,kha,lus,rwr,bgc,hne,tcq,trp',
-          layout: window.google.translate.TranslateElement.InlineLayout.SIMPLE, autoDisplay: true 
-        }, 'google_translate_element');
-      };
-    }
-  }, []);
-
-  useEffect(() => {
     if (user && view === 'loading_session') {
       if (user.role === 'Patient') {
-        setActivePatient(user.real_name); fetchPatientData(user.real_name); fetchPendingRequests(user.uid);
+        setActivePatient(user.real_name); fetchPatientData(user.real_name); fetchPendingRequests(user.uid); fetchFamilyMembers(user.uid);
       } else { fetchRoster(user.uid); setView('provider_roster'); }
     }
   }, [user]);
@@ -131,11 +108,34 @@ export default function App() {
     }
   }, [patientData]);
 
+  const fetchFamilyMembers = async (uid) => {
+    try {
+      const res = await fetch(`${BACKEND_URL}/api/family/${uid}`);
+      if (res.ok) { const data = await res.json(); setFamilyMembers(data); }
+    } catch (err) { console.error("Failed to fetch family", err); }
+  };
+
+  const handleAddFamilyMember = async (e) => {
+    e.preventDefault();
+    const childUid = generateUID(newFamilyMember.name, 'Patient');
+    try {
+      const res = await fetch(`${BACKEND_URL}/api/family/add`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ parent_uid: user.uid, name: newFamilyMember.name, age: parseInt(newFamilyMember.age), gender: newFamilyMember.gender, child_uid: childUid })
+      });
+      const data = await res.json();
+      alert(data.message);
+      fetchFamilyMembers(user.uid);
+      setView('dashboard');
+    } catch (err) { alert("Failed to add family member."); }
+  };
+
   // --- 📸 CENTRALIZED FILE SMART SCANNER ---
   const handleSmartScan = async (file) => {
     const formData = new FormData(); 
     formData.append('file', file);
     if (user && user.role === 'Provider') { formData.append('provider_uid', user.uid); }
+    if (user && user.role === 'Patient') { formData.append('patient_uid', user.uid); } // 👈 Patient scoping
     
     try {
         const res = await fetch(`${BACKEND_URL}/api/predict-patient`, { method: 'POST', body: formData });
@@ -144,13 +144,12 @@ export default function App() {
         if (data.matched_patient) {
             setScanModal({ type: 'file', patient: data.matched_patient, payload: file });
         } else { 
-            setScanModal({ type: 'error', message: "Smart Scan couldn't find a matching patient from your roster in this document. Please select the patient manually." });
-            setView('provider_roster');
+            setScanModal({ type: 'error', message: `Smart Scan couldn't find a matching patient from your ${user.role === 'Provider' ? 'roster' : 'family'} in this document.` });
+            setView(user.role === 'Provider' ? 'provider_roster' : 'dashboard');
         }
     } catch (err) { 
-        setIsScanning(false); 
-        setScanModal({ type: 'error', message: "Smart Scan failed to connect to the backend server. Please select a patient manually." }); 
-        setView('provider_roster');
+        setIsScanning(false); setScanModal({ type: 'error', message: "Smart Scan failed to connect to the backend server." }); 
+        setView(user.role === 'Provider' ? 'provider_roster' : 'dashboard');
     }
   };
 
@@ -159,40 +158,32 @@ export default function App() {
     const formData = new FormData();
     formData.append('text_payload', textString);
     if (user && user.role === 'Provider') { formData.append('provider_uid', user.uid); }
+    if (user && user.role === 'Patient') { formData.append('patient_uid', user.uid); } // 👈 Patient scoping
     
     try {
         const res = await fetch(`${BACKEND_URL}/api/predict-patient`, { method: 'POST', body: formData });
         const data = await res.json();
         setIsScanning(false);
-        
         if (data.matched_patient) {
             setScanModal({ type: 'text', patient: data.matched_patient, payload: textString });
         } else {
-            setScanModal({ type: 'error', message: `No matching patient found on your roster for the shared text:\n\n"${textString}"\n\nPlease select a patient manually.` });
-            setView('provider_roster');
+            setScanModal({ type: 'error', message: `No matching patient found in your ${user.role === 'Provider' ? 'roster' : 'family'} for the shared text:\n\n"${textString}"` });
+            setView(user.role === 'Provider' ? 'provider_roster' : 'dashboard');
         }
     } catch (e) {
-        setIsScanning(false); 
-        setScanModal({ type: 'error', message: "Text processing failed to connect to the backend server." }); 
-        setView('provider_roster');
+        setIsScanning(false); setScanModal({ type: 'error', message: "Text processing failed to connect to the backend server." }); 
+        setView(user.role === 'Provider' ? 'provider_roster' : 'dashboard');
     }
   };
 
-  // --- 🏥 SAVE MODAL ACTION (WITH DYNAMIC PROVIDER NAME) ---
   const confirmScanModal = async () => {
       if (!scanModal) return;
       if (scanModal.type === 'text') {
           const dateStr = new Date().toISOString().split('T')[0];
           try {
               await fetch(`${BACKEND_URL}/api/visit/note`, { 
-                  method: 'POST', 
-                  headers: { 'Content-Type': 'application/json' }, 
-                  body: JSON.stringify({ 
-                      target_patient: scanModal.patient, 
-                      visit_date: dateStr, 
-                      note: `[Shared Text Message]:\n${scanModal.payload}`,
-                      provider_name: user?.real_name || "Unknown Provider" // 👈 Dynamic Name Used
-                  }) 
+                  method: 'POST', headers: { 'Content-Type': 'application/json' }, 
+                  body: JSON.stringify({ target_patient: scanModal.patient, visit_date: dateStr, note: `[Shared Text Message]:\n${scanModal.payload}`, provider_name: user?.real_name || "Unknown Provider" }) 
               });
               fetchPatientData(scanModal.patient);
           } catch(e) { console.error(e); }
@@ -201,57 +192,32 @@ export default function App() {
       setScanModal(null);
   };
 
-  // --- 🔄 PWA SHARE INTERCEPTOR ---
   useEffect(() => {
     if (!user) return; 
     const urlParams = new URLSearchParams(window.location.search);
     if (urlParams.get('incoming_share') === 'true') {
-      
       setIsScanning(true); 
-
       (async () => {
         const cache = await caches.open('shared-files-cache'); 
-        const target = user.role === 'Patient' ? user.real_name : activePatient;
+        const target = activePatient || (user.role === 'Patient' ? user.real_name : '');
         
         const cachedFile = await cache.match('/latest-shared-file');
         const cachedText = await cache.match('/latest-shared-text');
 
         if (cachedFile) {
           const blob = await cachedFile.blob();
-          const filename = cachedFile.headers.get('X-File-Name') || 'shared_document.pdf';
-          const file = new File([blob], filename, { type: blob.type });
-          if (target && target !== '') { processDocumentUpload(file, target); setIsScanning(false); } 
-          else { handleSmartScan(file); } 
+          const file = new File([blob], cachedFile.headers.get('X-File-Name') || 'shared_document.pdf', { type: blob.type });
+          handleSmartScan(file); 
           await cache.delete('/latest-shared-file');
         }
         else if (cachedText) {
           const sharedTextString = await cachedText.text();
-          if (target && target !== '') {
-            try {
-              const dateStr = new Date().toISOString().split('T')[0];
-              await fetch(`${BACKEND_URL}/api/visit/note`, { 
-                  method: 'POST', 
-                  headers: { 'Content-Type': 'application/json' }, 
-                  body: JSON.stringify({ 
-                      target_patient: target, 
-                      visit_date: dateStr, 
-                      note: `[Shared Text Message via Forward Menu]:\n${sharedTextString}`,
-                      provider_name: user?.real_name || "Unknown Provider" // 👈 Dynamic Name Used
-                  }) 
-              });
-              fetchPatientData(target);
-              setIsScanning(false);
-            } catch (err) { setIsScanning(false); setScanModal({ type: 'error', message: "Failed to append shared text to the server." }); }
-          } else { 
-            handleTextSmartScan(sharedTextString); 
-          }
+          handleTextSmartScan(sharedTextString); 
           await cache.delete('/latest-shared-text'); 
-        } 
-        else {
+        } else {
           setIsScanning(false);
-          setScanModal({ type: 'error', message: "The share was intercepted, but the payload was completely empty. Android may have blocked the read operation." });
+          setScanModal({ type: 'error', message: "The share was intercepted, but the payload was completely empty." });
         }
-        
         window.history.replaceState({}, document.title, "/");
       })();
     }
@@ -263,11 +229,8 @@ export default function App() {
         if (!launchParams.files || launchParams.files.length === 0) return;
         try {
           const fileHandle = launchParams.files[0]; const file = await fileHandle.getFile();
-          const target = user?.role === 'Patient' ? user.real_name : activePatient;
-          if (target && target !== "") {
-            processDocumentUpload(file, target);
-          } else { handleSmartScan(file); }
-        } catch (err) { alert("Failed to process external file access."); setView('provider_roster'); }
+          handleSmartScan(file);
+        } catch (err) { alert("Failed to process external file access."); }
       });
     }
   }, [user, activePatient]);
@@ -299,7 +262,7 @@ export default function App() {
         localStorage.setItem('cliniport_user', JSON.stringify(data)); 
         setIsIdUnlocked(false);
         if (data.role === 'Patient') {
-          setActivePatient(data.real_name); fetchPatientData(data.real_name); fetchPendingRequests(data.uid); setView('dashboard');
+          setActivePatient(data.real_name); fetchPatientData(data.real_name); fetchPendingRequests(data.uid); fetchFamilyMembers(data.uid); setView('dashboard');
         } else { fetchRoster(data.uid); setView('provider_roster'); }
       }, 800);
     } catch (err) { setIsLoading(false); if (err.message === "Failed to fetch") setAuthError("Cannot connect to cloud server."); else setAuthError(err.message); }
@@ -340,7 +303,7 @@ export default function App() {
 
   const handleAcceptRequest = async (req) => {
     try {
-      const res = await fetch(`${BACKEND_URL}/api/connect/accept`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ provider_uid: req.doctorId, patient_uid: user.uid }) });
+      const res = await fetch(`${BACKEND_URL}/api/connect/accept`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ provider_uid: req.doctorId, patient_uid: req.target_uid || user.uid }) });
       const data = await res.json(); alert(data.message); fetchPendingRequests(user.uid);
     } catch (err) { alert("Failed to authorize connection."); }
   };
@@ -368,57 +331,40 @@ export default function App() {
 
   const handleFileUpload = async (e) => {
     const file = e.target.files[0]; if (!file) return;
-    const target = user.role === 'Patient' ? user.real_name : activePatient; if (!target) return alert("Please select a patient first.");
+    const target = activePatient; if (!target) return alert("Please select a patient first.");
     const proceed = window.confirm(`Upload this document for ${target}?`); if (!proceed) { e.target.value = null; return; }
     processDocumentUpload(file, target); e.target.value = null; 
   };
 
   const handleSaveProfile = async () => {
-    const target = user.role === 'Patient' ? user.real_name : activePatient;
+    const target = activePatient;
     try { const res = await fetch(`${BACKEND_URL}/api/profile`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ target_patient: target, ...profileForm }) }); const data = await res.json(); alert(data.message); setIsEditingProfile(false); fetchPatientData(target); } catch (err) { alert("Failed to update profile."); }
   };
 
   const handleSaveVisitNote = async (date) => {
-    const target = user.role === 'Patient' ? user.real_name : activePatient;
+    const target = activePatient;
     try { 
-        const res = await fetch(`${BACKEND_URL}/api/visit/note`, { 
-            method: 'POST', 
-            headers: { 'Content-Type': 'application/json' }, 
-            body: JSON.stringify({ 
-                target_patient: target, 
-                visit_date: date, 
-                note: visitNotes[date],
-                provider_name: user?.real_name || "Unknown Provider" // 👈 Dynamic Name Used
-            }) 
-        }); 
-        const data = await res.json(); 
-        alert(data.message); 
-        fetchPatientData(target); 
+        const res = await fetch(`${BACKEND_URL}/api/visit/note`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ target_patient: target, visit_date: date, note: visitNotes[date], provider_name: user?.real_name || "Unknown Provider" }) }); 
+        const data = await res.json(); alert(data.message); fetchPatientData(target); 
     } catch (err) { alert("Failed to save note."); }
   };
 
   const handleLogVitals = async (e) => {
-    e.preventDefault(); const target = user.role === 'Patient' ? user.real_name : activePatient;
+    e.preventDefault(); const target = activePatient;
     if (!vitalsInput.height || !vitalsInput.weight) return alert("Enter height and weight.");
     try { const res = await fetch(`${BACKEND_URL}/api/vitals`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ target_patient: target, height_cm: parseFloat(vitalsInput.height), weight_kg: parseFloat(vitalsInput.weight) }) }); const data = await res.json(); alert(data.message); setVitalsInput({ height: '', weight: '' }); fetchPatientData(target); } catch (err) { alert("Failed to log vitals."); }
   };
 
   const handleAddPrescription = async (e) => {
-    e.preventDefault(); const target = user.role === 'Patient' ? user.real_name : activePatient;
+    e.preventDefault(); const target = activePatient;
     if (!prescriptionInput.medication_name) return alert("Enter medication name.");
     try { const res = await fetch(`${BACKEND_URL}/api/prescriptions`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ target_patient: target, ...prescriptionInput }) }); const data = await res.json(); alert(data.message); setPrescriptionInput({ medication_name: '', dosage: '', instructions: '' }); fetchPatientData(target); } catch (err) { alert("Failed to add prescription."); }
   };
 
   const handleAddOrder = async (e) => {
-    e.preventDefault(); const target = user.role === 'Patient' ? user.real_name : activePatient;
+    e.preventDefault(); const target = activePatient;
     if (!orderInput.test_name) return alert("Enter a test name.");
     try { const res = await fetch(`${BACKEND_URL}/api/orders`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ target_patient: target, ...orderInput }) }); const data = await res.json(); alert(data.message); setOrderInput({ test_name: '', reason: '' }); fetchPatientData(target); } catch (err) { alert("Failed to place order."); }
-  };
-
-  const calculateProjectedHeight = () => {
-      const mom = parseFloat(parentsHeight.mom); const dad = parseFloat(parentsHeight.dad);
-      if (!mom || !dad) return alert("Enter both parents' heights in cm.");
-      const midParental = (mom + dad) / 2; setPredictedHeight({ boy: (midParental + 6.5).toFixed(1), girl: (midParental - 6.5).toFixed(1) });
   };
 
   const handleCategoryClick = (category) => {
@@ -436,8 +382,6 @@ export default function App() {
           <div className="absolute w-8 h-12 bg-blue-500 rounded-[50%_50%_50%_50%/60%_60%_40%_40%] liquid-drop shadow-xl"></div><div className="absolute w-24 h-24 border-8 border-blue-400 rounded-full opacity-0 liquid-ripple-1"></div><div className="absolute w-24 h-24 bg-blue-300 rounded-full opacity-0 liquid-ripple-2"></div>
         </div>
       )}
-
-      <div id="google_translate_element" className="fixed bottom-6 right-6 z-[9999] shadow-2xl rounded-lg overflow-hidden border border-slate-200 bg-white p-1"></div>
 
       {view === 'loading_session' ? (
         <div className="flex flex-col justify-center items-center min-h-screen bg-slate-50">
@@ -514,7 +458,6 @@ export default function App() {
               <div className="bg-slate-50 border border-slate-200 rounded-lg p-3 mb-4 text-center">
                   <p className="text-xs text-slate-500 uppercase font-bold mb-1">Your CliniPort ID</p>
                   <p className="text-lg font-mono font-black text-blue-700 tracking-wider mb-2">{isIdUnlocked ? user.uid : '••••••••'}</p>
-                  
                   {!isIdUnlocked ? (
                       <form onSubmit={handleUnlockId} className="flex flex-col gap-2 mt-2 animate-in fade-in duration-300">
                           {unlockError && <p className="text-[10px] text-red-600 font-bold leading-tight">{unlockError}</p>}
@@ -524,13 +467,30 @@ export default function App() {
                           </button>
                       </form>
                   ) : (
-                      <button onClick={() => setIsIdUnlocked(false)} className="text-xs font-bold text-blue-600 hover:text-blue-800 hover:underline transition-all">
-                          Lock Now
-                      </button>
+                      <button onClick={() => setIsIdUnlocked(false)} className="text-xs font-bold text-blue-600 hover:text-blue-800 hover:underline transition-all">Lock Now</button>
                   )}
               </div>
-              
               <hr className="mb-4 border-slate-100" />
+
+              {/* --- 👨‍👩‍👧‍👦 FAMILY SIDEBAR FOR PATIENTS --- */}
+              {user.role === 'Patient' && (
+                <div className="mb-4">
+                  <p className="text-xs text-slate-400 font-bold uppercase tracking-wider mb-2 px-1">My Family</p>
+                  <ul className="space-y-1 mb-3">
+                    {familyMembers.map((member, idx) => (
+                      <li key={idx}>
+                        <button onClick={() => { fetchPatientData(member.name); setView('dashboard'); }} className={`w-full text-left p-2 rounded-lg transition flex justify-between items-center text-sm ${activePatient === member.name && view === 'dashboard' ? 'bg-blue-50 text-blue-700 font-bold' : 'hover:bg-slate-50 text-slate-600'}`}>
+                          <span>{member.name}</span>
+                          {member.name === user.real_name && <span className="text-[10px] bg-blue-100 text-blue-600 px-2 py-0.5 rounded-full">Me</span>}
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                  <button onClick={() => setView('add_family_member')} className={`w-full text-left p-2 rounded-lg transition flex items-center gap-2 text-sm ${view === 'add_family_member' ? 'bg-emerald-50 text-emerald-700 font-bold' : 'text-emerald-600 hover:bg-slate-50'}`}><UserPlus size={16}/> Add Dependent</button>
+                  <hr className="my-4 border-slate-100" />
+                </div>
+              )}
+
               <ul className="space-y-2">
                 {user.role === 'Provider' && (
                    <>
@@ -546,16 +506,29 @@ export default function App() {
                      </li>
                 )}
                 {activePatient && (
-                  <>
-                    <li><button onClick={() => setView('dashboard')} className={`w-full text-left p-3 rounded-xl transition ${view === 'dashboard' ? 'bg-blue-50 text-blue-700 font-bold' : 'hover:bg-slate-50 text-slate-600'}`}>Chart: {activePatient}</button></li>
-                    <li><button onClick={() => setView('upload')} className={`w-full text-left p-3 rounded-xl transition flex items-center gap-2 ${view === 'upload' ? 'bg-blue-50 text-blue-700 font-bold' : 'hover:bg-slate-50 text-slate-600'}`}><Upload size={18}/> Upload Document</button></li>
-                  </>
+                  <li><button onClick={() => setView('upload')} className={`w-full text-left p-3 rounded-xl transition flex items-center gap-2 ${view === 'upload' ? 'bg-blue-50 text-blue-700 font-bold' : 'hover:bg-slate-50 text-slate-600'}`}><Upload size={18}/> Upload Document</button></li>
                 )}
               </ul>
             </div>
 
             <div className="col-span-1 lg:col-span-3 space-y-6">
-              
+
+              {/* --- 👨‍👩‍👧‍👦 ADD FAMILY MEMBER VIEW --- */}
+              {view === 'add_family_member' && (
+                 <div className="bg-white p-6 md:p-10 rounded-2xl shadow-sm border border-slate-100 animate-in fade-in slide-in-from-bottom-4 duration-500 max-w-lg">
+                   <h3 className="text-xl font-bold mb-2 flex items-center gap-2"><UserPlus className="text-emerald-600"/> Add Dependent</h3>
+                   <p className="text-slate-500 text-sm mb-6">Create a managed profile for your family member. Their charts and uploads will be grouped under your primary account.</p>
+                   <form onSubmit={handleAddFamilyMember} className="space-y-4">
+                      <div><label className="text-sm font-bold text-slate-700">Full Legal Name</label><input type="text" required value={newFamilyMember.name} onChange={e => setNewFamilyMember({...newFamilyMember, name: e.target.value})} className="w-full p-3 border border-slate-200 rounded-lg bg-slate-50 mt-1 focus:ring-2 focus:ring-emerald-500 outline-none" /></div>
+                      <div className="flex gap-4">
+                        <div className="flex-1"><label className="text-sm font-bold text-slate-700">Age</label><input type="number" required value={newFamilyMember.age} onChange={e => setNewFamilyMember({...newFamilyMember, age: e.target.value})} className="w-full p-3 border border-slate-200 rounded-lg bg-slate-50 mt-1 focus:ring-2 focus:ring-emerald-500 outline-none" /></div>
+                        <div className="flex-1"><label className="text-sm font-bold text-slate-700">Gender</label><select value={newFamilyMember.gender} onChange={e => setNewFamilyMember({...newFamilyMember, gender: e.target.value})} className="w-full p-3 border border-slate-200 rounded-lg bg-slate-50 mt-1 focus:ring-2 focus:ring-emerald-500 outline-none"><option value="Male">Male</option><option value="Female">Female</option><option value="Other">Other</option></select></div>
+                      </div>
+                      <button type="submit" className="w-full bg-emerald-600 text-white font-bold py-3 rounded-xl hover:bg-emerald-700 transition shadow-sm mt-4">Create Profile</button>
+                   </form>
+                 </div>
+              )}
+
               {view === 'provider_roster' && (
                  <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
                     <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 flex flex-col sm:flex-row gap-6 items-center justify-between">
@@ -590,8 +563,13 @@ export default function App() {
                        <div className="space-y-4">
                            {pendingRequests.map((req, i) => (
                                <div key={i} className="flex flex-col sm:flex-row justify-between items-center bg-slate-50 p-4 rounded-xl border border-slate-200 gap-4">
-                                   <div><p className="font-bold text-slate-800 text-lg">Dr. {req.doctorName}</p><p className="text-sm text-slate-500 font-mono">Provider ID: {req.doctorId}</p></div>
-                                   <div className="flex gap-2 w-full sm:w-auto"><button onClick={() => setPendingRequests(prev => prev.filter(r => r.doctorId !== req.doctorId))} className="flex-1 sm:flex-none bg-white border border-slate-300 text-slate-600 px-4 py-2 font-bold rounded-lg hover:bg-slate-100">Decline</button><button onClick={() => handleAcceptRequest(req)} className="flex-1 sm:flex-none bg-emerald-600 text-white px-6 py-2 font-bold rounded-lg hover:bg-emerald-700 shadow-sm">Authorize Access</button></div>
+                                   <div>
+                                       <p className="font-bold text-slate-800 text-lg">Dr. {req.doctorName}</p>
+                                       <p className="text-sm text-slate-500 font-mono">Provider ID: {req.doctorId}</p>
+                                       {/* 👨‍👩‍👧‍👦 Tell the primary account who this request is for! */}
+                                       {req.target_member && req.target_member !== user.real_name && <p className="text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded inline-block mt-2">Requesting access to: <strong>{req.target_member}</strong></p>}
+                                   </div>
+                                   <div className="flex gap-2 w-full sm:w-auto mt-3 sm:mt-0"><button onClick={() => setPendingRequests(prev => prev.filter(r => r.doctorId !== req.doctorId))} className="flex-1 sm:flex-none bg-white border border-slate-300 text-slate-600 px-4 py-2 font-bold rounded-lg hover:bg-slate-100">Decline</button><button onClick={() => handleAcceptRequest(req)} className="flex-1 sm:flex-none bg-emerald-600 text-white px-6 py-2 font-bold rounded-lg hover:bg-emerald-700 shadow-sm">Authorize</button></div>
                                </div>
                            ))}
                        </div>
@@ -895,7 +873,6 @@ export default function App() {
       {scanModal && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[99999] flex flex-col justify-center items-center px-4 animate-in fade-in duration-300">
           <div className="bg-white p-6 md:p-8 rounded-2xl shadow-2xl max-w-md w-full border border-slate-100 animate-in zoom-in-95 duration-300">
-            
             {scanModal.type === 'error' ? (
                 <>
                     <div className="w-16 h-16 bg-red-100 text-red-600 rounded-full flex items-center justify-center mx-auto mb-4"><AlertTriangle size={32} /></div>
@@ -908,20 +885,14 @@ export default function App() {
                     <div className="w-16 h-16 bg-blue-100 text-blue-600 rounded-full flex items-center justify-center mx-auto mb-4"><ShieldCheck size={32} /></div>
                     <h3 className="text-xl font-bold text-slate-900 text-center mb-2">Smart Scan Match!</h3>
                     <p className="text-slate-600 text-center mb-6">
-                        We detected <strong className="text-blue-700">{scanModal.patient}</strong> from your roster in the shared {scanModal.type === 'text' ? 'message' : 'document'}.
+                        We detected <strong className="text-blue-700">{scanModal.patient}</strong> in the shared {scanModal.type === 'text' ? 'message' : 'document'}.
                     </p>
-                    
                     {scanModal.type === 'text' && (
-                        <div className="bg-slate-50 p-3 rounded-lg border border-slate-200 mb-6 max-h-32 overflow-y-auto">
-                            <p className="text-xs text-slate-500 italic whitespace-pre-wrap">"{scanModal.payload}"</p>
-                        </div>
+                        <div className="bg-slate-50 p-3 rounded-lg border border-slate-200 mb-6 max-h-32 overflow-y-auto"><p className="text-xs text-slate-500 italic whitespace-pre-wrap">"{scanModal.payload}"</p></div>
                     )}
-
                     <div className="flex gap-3">
-                        <button onClick={() => { setScanModal(null); setView('provider_roster'); }} className="flex-1 bg-white border border-slate-300 text-slate-700 font-bold py-3 rounded-xl hover:bg-slate-50 transition">Cancel</button>
-                        <button onClick={confirmScanModal} className="flex-1 bg-blue-600 text-white font-bold py-3 rounded-xl hover:bg-blue-700 transition shadow-sm flex items-center justify-center gap-2">
-                            <Save size={18}/> Save to Chart
-                        </button>
+                        <button onClick={() => { setScanModal(null); setView(user.role === 'Provider' ? 'provider_roster' : 'dashboard'); }} className="flex-1 bg-white border border-slate-300 text-slate-700 font-bold py-3 rounded-xl hover:bg-slate-50 transition">Cancel</button>
+                        <button onClick={confirmScanModal} className="flex-1 bg-blue-600 text-white font-bold py-3 rounded-xl hover:bg-blue-700 transition shadow-sm flex items-center justify-center gap-2"><Save size={18}/> Save to Chart</button>
                     </div>
                 </>
             )}
@@ -935,7 +906,7 @@ export default function App() {
           <div className="bg-white p-8 rounded-2xl shadow-2xl flex flex-col items-center max-w-sm w-full text-center border border-slate-100">
             <Activity className="text-blue-600 animate-pulse mb-4 animate-spin" size={48} />
             <h3 className="text-slate-900 font-bold text-lg mb-1">AI Smart Scanning Active</h3>
-            <p className="text-slate-500 text-sm">Cross-referencing shared data with your assigned roster...</p>
+            <p className="text-slate-500 text-sm">Cross-referencing shared data...</p>
           </div>
         </div>
       )}

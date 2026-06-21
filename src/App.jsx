@@ -72,11 +72,8 @@ export default function App() {
 
   const generateUID = (name, role) => {
     const initials = getInitials(name);
-    if (role === 'Patient') {
-      return `${initials}${Math.floor(100000 + Math.random() * 900000)}`; 
-    } else {
-      return `D${initials}${Math.floor(1000 + Math.random() * 9000)}`; 
-    }
+    if (role === 'Patient') { return `${initials}${Math.floor(100000 + Math.random() * 900000)}`; } 
+    else { return `D${initials}${Math.floor(1000 + Math.random() * 9000)}`; }
   };
 
   useEffect(() => {
@@ -100,17 +97,11 @@ export default function App() {
     }
   }, []);
 
-  // --- 🔄 SESSION RESTORATION EFFECT ---
   useEffect(() => {
     if (user && view === 'loading_session') {
       if (user.role === 'Patient') {
-        setActivePatient(user.real_name);
-        fetchPatientData(user.real_name);
-        fetchPendingRequests(user.uid);
-      } else {
-        fetchRoster(user.uid);
-        setView('provider_roster');
-      }
+        setActivePatient(user.real_name); fetchPatientData(user.real_name); fetchPendingRequests(user.uid);
+      } else { fetchRoster(user.uid); setView('provider_roster'); }
     }
   }, [user]);
 
@@ -123,6 +114,36 @@ export default function App() {
     }
   }, [patientData]);
 
+  // --- 📸 CENTRALIZED SMART SCANNER WITH ROSTER REDIRECT ---
+  const handleSmartScan = async (file) => {
+    setIsScanning(true);
+    const formData = new FormData(); 
+    formData.append('file', file);
+    if (user && user.role === 'Provider') { formData.append('provider_uid', user.uid); }
+    
+    try {
+        const res = await fetch(`${BACKEND_URL}/api/predict-patient`, { method: 'POST', body: formData });
+        const data = await res.json(); 
+        setIsScanning(false);
+        if (data.matched_patient) {
+            const confirmAutoFile = window.confirm(`Smart Scan Results:\n\nWe detected this document belongs to "${data.matched_patient}" from your roster.\n\nWould you like to upload it to their chart?`);
+            if (confirmAutoFile) {
+                processDocumentUpload(file, data.matched_patient);
+            } else {
+                alert("Please select the patient manually from your roster.");
+                setView('provider_roster'); // Redirect to roster!
+            }
+        } else { 
+            alert("Smart Scan couldn't find a matching patient from your roster in this document. Please select the patient manually.");
+            setView('provider_roster'); // Redirect to roster!
+        }
+    } catch (err) { 
+        setIsScanning(false); 
+        alert("Smart Scan failed. Please select a patient manually.");
+        setView('provider_roster'); // Redirect to roster!
+    }
+  };
+
   useEffect(() => {
     if (!user) return; 
     const urlParams = new URLSearchParams(window.location.search);
@@ -131,34 +152,29 @@ export default function App() {
         const cache = await caches.open('shared-files-cache'); 
         const target = user.role === 'Patient' ? user.real_name : activePatient;
         const cachedFile = await cache.match('/latest-shared-file');
+        
         if (cachedFile) {
           const blob = await cachedFile.blob();
           const filename = cachedFile.headers.get('X-File-Name') || 'shared_document.pdf';
           const file = new File([blob], filename, { type: blob.type });
-          if (target && target !== '') { processDocumentUpload(file, target); } else {
-            setIsScanning(true);
-            const formData = new FormData(); formData.append('file', file);
-            try {
-              const res = await fetch(`${BACKEND_URL}/api/predict-patient`, { method: 'POST', body: formData });
-              const data = await res.json(); setIsScanning(false);
-              if (data.matched_patient) {
-                const confirmAutoFile = window.confirm(`Smart Scan Results:\n\nWe detected this document belongs to "${data.matched_patient}".\n\nWould you like to automatically upload it to their chart?`);
-                if (confirmAutoFile) processDocumentUpload(file, data.matched_patient);
-              } else { alert("Smart Scan couldn't confidently read a patient name. Please select the patient chart manually and upload it from the dashboard."); }
-            } catch (err) { setIsScanning(false); alert("Image received! Please select a patient chart profile manually to file it."); }
-          }
+          if (target && target !== '') { processDocumentUpload(file, target); } 
+          else { handleSmartScan(file); } // Call the centralized scanner!
           await cache.delete('/latest-shared-file');
         }
+        
         const cachedText = await cache.match('/latest-shared-text');
         if (cachedText) {
           const sharedTextString = await cachedText.text();
           if (target && target !== '') {
             try {
-              dateStr = new Date().toISOString().split('T')[0];
+              const dateStr = new Date().toISOString().split('T')[0];
               await fetch(`${BACKEND_URL}/api/visit/note`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ target_patient: target, visit_date: dateStr, note: `[Shared Text Message via Forward Menu]:\n${sharedTextString}` }) });
               alert(`Text snippet successfully appended to ${target}'s encounter notes!`); fetchPatientData(target);
             } catch (err) { alert("Failed to append shared text string to the backend server notes."); }
-          } else { alert(`Text snippet received via Share Menu:\n\n"${sharedTextString}"\n\nPlease select a patient chart profile first to save this message data.`); }
+          } else { 
+            alert(`Text snippet received via Share Menu:\n\n"${sharedTextString}"\n\nPlease select a patient chart profile first to save this message data.`); 
+            setView('provider_roster');
+          }
           await cache.delete('/latest-shared-text'); 
         }
         window.history.replaceState({}, document.title, "/");
@@ -172,15 +188,13 @@ export default function App() {
         if (!launchParams.files || launchParams.files.length === 0) return;
         try {
           const fileHandle = launchParams.files[0]; const file = await fileHandle.getFile();
-          const target = user?.role === 'Patient' ? user.real_name : (activePatient || "John Doe");
-          if (target && target !== "John Doe") {
+          const target = user?.role === 'Patient' ? user.real_name : activePatient;
+          if (target && target !== "") {
             processDocumentUpload(file, target); alert(`Successfully queued ${file.name} for ${target}!`);
           } else {
-            const formData = new FormData(); formData.append("file", file); formData.append("target_patient", "John Doe"); formData.append("uploader_name", user?.real_name || "Android Native Upload"); formData.append("force_override", "false");
-            await fetch(`${BACKEND_URL}/api/upload`, { method: "POST", body: formData });
-            alert(`Successfully imported ${file.name} to the matrix under ${target}!`); if (activePatient === "John Doe") fetchPatientData("John Doe");
+             handleSmartScan(file); // Call the centralized scanner!
           }
-        } catch (err) { alert("Failed to process external file access."); }
+        } catch (err) { alert("Failed to process external file access."); setView('provider_roster'); }
       });
     }
   }, [user, activePatient]);
@@ -209,7 +223,7 @@ export default function App() {
       setTimeout(() => {
         setIsLoading(false); 
         setUser(data); 
-        localStorage.setItem('cliniport_user', JSON.stringify(data)); // Commit to device disk
+        localStorage.setItem('cliniport_user', JSON.stringify(data)); 
         setIsIdUnlocked(false);
         if (data.role === 'Patient') {
           setActivePatient(data.real_name); fetchPatientData(data.real_name); fetchPendingRequests(data.uid); setView('dashboard');

@@ -6,8 +6,14 @@ const BACKEND_URL = "https://clinical-portal-backend-production.up.railway.app";
 
 export default function App() {
   const [splashState, setSplashState] = useState('visible');
-  const [user, setUser] = useState(null);
-  const [view, setView] = useState('login'); 
+  
+  // --- 💾 PERSISTED USER STATE ---
+  const [user, setUser] = useState(() => {
+    const savedUser = localStorage.getItem('cliniport_user');
+    return savedUser ? JSON.parse(savedUser) : null;
+  });
+  
+  const [view, setView] = useState(user ? 'loading_session' : 'login'); 
   const [textSize, setTextSize] = useState('normal'); 
   const [authError, setAuthError] = useState(''); 
   const [isLoading, setIsLoading] = useState(false); 
@@ -94,6 +100,20 @@ export default function App() {
     }
   }, []);
 
+  // --- 🔄 SESSION RESTORATION EFFECT ---
+  useEffect(() => {
+    if (user && view === 'loading_session') {
+      if (user.role === 'Patient') {
+        setActivePatient(user.real_name);
+        fetchPatientData(user.real_name);
+        fetchPendingRequests(user.uid);
+      } else {
+        fetchRoster(user.uid);
+        setView('provider_roster');
+      }
+    }
+  }, [user]);
+
   useEffect(() => {
     if (patientData.profile) { setProfileForm(patientData.profile); }
     if (patientData.visits) {
@@ -134,7 +154,7 @@ export default function App() {
           const sharedTextString = await cachedText.text();
           if (target && target !== '') {
             try {
-              const dateStr = new Date().toISOString().split('T')[0];
+              dateStr = new Date().toISOString().split('T')[0];
               await fetch(`${BACKEND_URL}/api/visit/note`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ target_patient: target, visit_date: dateStr, note: `[Shared Text Message via Forward Menu]:\n${sharedTextString}` }) });
               alert(`Text snippet successfully appended to ${target}'s encounter notes!`); fetchPatientData(target);
             } catch (err) { alert("Failed to append shared text string to the backend server notes."); }
@@ -187,7 +207,10 @@ export default function App() {
       const data = await res.json();
       if (!data.uid) data.uid = generateUID(data.real_name, data.role);
       setTimeout(() => {
-        setIsLoading(false); setUser(data); setIsIdUnlocked(false);
+        setIsLoading(false); 
+        setUser(data); 
+        localStorage.setItem('cliniport_user', JSON.stringify(data)); // Commit to device disk
+        setIsIdUnlocked(false);
         if (data.role === 'Patient') {
           setActivePatient(data.real_name); fetchPatientData(data.real_name); fetchPendingRequests(data.uid); setView('dashboard');
         } else { fetchRoster(data.uid); setView('provider_roster'); }
@@ -315,7 +338,12 @@ export default function App() {
 
       <div id="google_translate_element" className="fixed bottom-6 right-6 z-[9999] shadow-2xl rounded-lg overflow-hidden border border-slate-200 bg-white p-1"></div>
 
-      {!user ? (
+      {view === 'loading_session' ? (
+        <div className="flex flex-col justify-center items-center min-h-screen bg-slate-50">
+          <Activity className="text-blue-600 animate-spin mb-4" size={32} />
+          <p className="text-sm font-semibold text-slate-500 tracking-wide">Restoring Session...</p>
+        </div>
+      ) : !user ? (
         <div className="flex flex-col justify-center items-center py-12 px-4 min-h-screen bg-gradient-to-br from-blue-50 to-cyan-100">
           <div className="bg-white p-8 md:p-10 rounded-2xl shadow-xl w-full max-w-lg border border-slate-100 animate-in fade-in slide-in-from-bottom-8 duration-700">
             {view === 'login' ? (
@@ -369,7 +397,7 @@ export default function App() {
               <span className="text-xs font-mono font-bold bg-slate-100 text-slate-600 px-3 py-1 rounded-full border border-slate-200 shadow-inner mr-2 hidden sm:block">ID: {isIdUnlocked ? user.uid : '••••••••'}</span>
               <button onClick={() => setTextSize(textSize === 'normal' ? 'large' : 'normal')} className="text-slate-400 hover:text-blue-600 md:mr-4"><Settings size={18} /></button>
               <span className="text-xs md:text-sm font-medium bg-slate-100 px-3 py-1 rounded-full">{user.real_name}</span>
-              <button onClick={() => {setUser(null); setView('login');}} className="text-sm text-slate-500 hover:text-red-500 font-medium">Log Out</button>
+              <button onClick={() => { localStorage.removeItem('cliniport_user'); setUser(null); setView('login'); }} className="text-sm text-slate-500 hover:text-red-500 font-medium">Log Out</button>
             </div>
           </nav>
 
@@ -381,7 +409,6 @@ export default function App() {
                 <div><p className="font-bold text-slate-800 leading-tight">{user.real_name}</p><p className="text-xs text-slate-500 font-mono">{user.role}</p></div>
               </div>
               
-              {/* --- 🔐 MINI VAULT IN SIDEBAR --- */}
               <div className="bg-slate-50 border border-slate-200 rounded-lg p-3 mb-4 text-center">
                   <p className="text-xs text-slate-500 uppercase font-bold mb-1">Your CliniPort ID</p>
                   <p className="text-lg font-mono font-black text-blue-700 tracking-wider mb-2">{isIdUnlocked ? user.uid : '••••••••'}</p>

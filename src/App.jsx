@@ -7,7 +7,6 @@ const BACKEND_URL = "https://clinical-portal-backend-production.up.railway.app";
 export default function App() {
   const [splashState, setSplashState] = useState('visible');
   
-  // --- 💾 PERSISTED USER STATE ---
   const [user, setUser] = useState(() => {
     const savedUser = localStorage.getItem('cliniport_user');
     return savedUser ? JSON.parse(savedUser) : null;
@@ -37,12 +36,10 @@ export default function App() {
   const [searchQuery, setSearchQuery] = useState('');
   const [dashTab, setDashTab] = useState('profile'); 
 
-  // --- CONNECTION & ROSTER STATE ---
   const [connectIdInput, setConnectIdInput] = useState('');
   const [providerRoster, setProviderRoster] = useState([]); 
   const [pendingRequests, setPendingRequests] = useState([]); 
 
-  // --- 🔐 SECURE ID UNLOCK STATE ---
   const [isIdUnlocked, setIsIdUnlocked] = useState(false);
   const [unlockPassword, setUnlockPassword] = useState('');
   const [unlockError, setUnlockError] = useState('');
@@ -133,7 +130,6 @@ export default function App() {
 
   // --- 📸 CENTRALIZED FILE SMART SCANNER ---
   const handleSmartScan = async (file) => {
-    setIsScanning(true);
     const formData = new FormData(); 
     formData.append('file', file);
     if (user && user.role === 'Provider') { formData.append('provider_uid', user.uid); }
@@ -150,14 +146,13 @@ export default function App() {
         }
     } catch (err) { 
         setIsScanning(false); 
-        setScanModal({ type: 'error', message: "Smart Scan failed. Please select a patient manually." }); 
+        setScanModal({ type: 'error', message: "Smart Scan failed to connect to the backend server. Please select a patient manually." }); 
         setView('provider_roster');
     }
   };
 
   // --- 📝 TEXT SMART SCANNER ---
   const handleTextSmartScan = async (textString) => {
-    setIsScanning(true);
     const formData = new FormData();
     formData.append('text_payload', textString);
     if (user && user.role === 'Provider') { formData.append('provider_uid', user.uid); }
@@ -175,7 +170,7 @@ export default function App() {
         }
     } catch (e) {
         setIsScanning(false); 
-        setScanModal({ type: 'error', message: "Text processing failed." }); 
+        setScanModal({ type: 'error', message: "Text processing failed to connect to the backend server." }); 
         setView('provider_roster');
     }
   };
@@ -198,32 +193,45 @@ export default function App() {
     if (!user) return; 
     const urlParams = new URLSearchParams(window.location.search);
     if (urlParams.get('incoming_share') === 'true') {
+      
+      // 🚨 INSTANTLY SHOW UI SO WE KNOW IT WOKE UP
+      setIsScanning(true); 
+
       (async () => {
         const cache = await caches.open('shared-files-cache'); 
         const target = user.role === 'Patient' ? user.real_name : activePatient;
         
         const cachedFile = await cache.match('/latest-shared-file');
+        const cachedText = await cache.match('/latest-shared-text');
+
         if (cachedFile) {
           const blob = await cachedFile.blob();
           const filename = cachedFile.headers.get('X-File-Name') || 'shared_document.pdf';
           const file = new File([blob], filename, { type: blob.type });
-          if (target && target !== '') { processDocumentUpload(file, target); } 
+          if (target && target !== '') { processDocumentUpload(file, target); setIsScanning(false); } 
           else { handleSmartScan(file); } 
           await cache.delete('/latest-shared-file');
         }
-        
-        const cachedText = await cache.match('/latest-shared-text');
-        if (cachedText) {
+        else if (cachedText) {
           const sharedTextString = await cachedText.text();
           if (target && target !== '') {
             try {
               const dateStr = new Date().toISOString().split('T')[0];
               await fetch(`${BACKEND_URL}/api/visit/note`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ target_patient: target, visit_date: dateStr, note: `[Shared Text Message via Forward Menu]:\n${sharedTextString}` }) });
               fetchPatientData(target);
-            } catch (err) { alert("Failed to append shared text string to the backend server notes."); }
-          } else { handleTextSmartScan(sharedTextString); }
+              setIsScanning(false);
+            } catch (err) { setIsScanning(false); setScanModal({ type: 'error', message: "Failed to append shared text to the server." }); }
+          } else { 
+            handleTextSmartScan(sharedTextString); 
+          }
           await cache.delete('/latest-shared-text'); 
+        } 
+        else {
+          // 🚨 IF CACHE WAS EMPTY, POP UP THE ERROR MODAL INSTEAD OF FAILING SILENTLY
+          setIsScanning(false);
+          setScanModal({ type: 'error', message: "The share was intercepted, but the payload was completely empty. Android may have blocked the read operation." });
         }
+        
         window.history.replaceState({}, document.title, "/");
       })();
     }
@@ -887,6 +895,7 @@ export default function App() {
         </div>
       )}
 
+      {/* --- AI SMART SCANNER OVERLAY --- */}
       {isScanning && (
         <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-[99999] flex flex-col justify-center items-center text-white px-4 animate-in fade-in duration-300">
           <div className="bg-white p-8 rounded-2xl shadow-2xl flex flex-col items-center max-w-sm w-full text-center border border-slate-100">

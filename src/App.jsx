@@ -1,8 +1,9 @@
+
 import React, { useState, useEffect, useRef } from 'react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine, Legend } from 'recharts';
-import { Activity, Upload, User, ShieldCheck, UserPlus, Search, Users, CheckCircle, ActivitySquare, Syringe, Bug, FlaskConical, AlertTriangle, ShieldAlert, Ruler, Scale, Calculator, ClipboardList, Edit3, Save, Stethoscope, FileText, Pill, FileSignature, Settings, Link as LinkIcon, Inbox, Bell, Trash2 } from 'lucide-react';
+import { Activity, Upload, User, ShieldCheck, UserPlus, Search, Users, ActivitySquare, Syringe, Bug, FlaskConical, AlertTriangle, Ruler, Scale, ClipboardList, Edit3, Save, Stethoscope, FileText, Pill, FileSignature, Settings, Link as LinkIcon, Inbox, Bell, Trash2 } from 'lucide-react';
 
-const BACKEND_URL = "https://clinical-portal-backend-production.up.railway.app";
+const BACKEND_URL = "[https://clinical-portal-backend-production.up.railway.app](https://clinical-portal-backend-production.up.railway.app)";
 
 export default function App() {
   const [splashState, setSplashState] = useState('visible');
@@ -48,9 +49,11 @@ export default function App() {
   const [unlockError, setUnlockError] = useState('');
   const [isUnlocking, setIsUnlocking] = useState(false);
 
-  // --- 🛎️ ARRAY-BASED MODAL STATE ---
   const [scanModal, setScanModal] = useState(null); 
   const [selectedScanPatient, setSelectedScanPatient] = useState('');
+  const [isScanning, setIsScanning] = useState(false);
+  
+  const [isSaving, setIsSaving] = useState(false);
 
   const [vitalsInput, setVitalsInput] = useState({ height: '', weight: '' });
   const [isEditingProfile, setIsEditingProfile] = useState(false);
@@ -58,7 +61,6 @@ export default function App() {
   const [visitNotes, setVisitNotes] = useState({});
   const [prescriptionInput, setPrescriptionInput] = useState({ medication_name: '', dosage: '', instructions: '' });
   const [orderInput, setOrderInput] = useState({ test_name: '', reason: '' });
-  const [isScanning, setIsScanning] = useState(false);
 
   const hardResetApp = async () => {
     if ('serviceWorker' in navigator) {
@@ -172,9 +174,12 @@ export default function App() {
         if (data.matched_patients && data.matched_patients.length > 0) { 
             setScanModal({ type: 'file', patients: data.matched_patients, payload: file }); 
             setSelectedScanPatient(data.matched_patients[0]); 
-        } 
-        else { setScanModal({ type: 'error', message: `Smart Scan couldn't find a matching patient in this document.` }); setView(user.role === 'Provider' ? 'provider_roster' : 'dashboard'); }
-    } catch (err) { setIsScanning(false); setScanModal({ type: 'error', message: "Smart Scan failed." }); setView(user.role === 'Provider' ? 'provider_roster' : 'dashboard'); }
+        } else { 
+            setScanModal({ type: 'manual_file', payload: file }); setSelectedScanPatient('');
+        }
+    } catch (err) { 
+        setIsScanning(false); setScanModal({ type: 'manual_file', payload: file }); setSelectedScanPatient('');
+    }
   };
 
   const handleTextSmartScan = async (textString) => {
@@ -185,15 +190,22 @@ export default function App() {
         if (data.matched_patients && data.matched_patients.length > 0) { 
             setScanModal({ type: 'text', patients: data.matched_patients, payload: textString }); 
             setSelectedScanPatient(data.matched_patients[0]); 
-        } 
-        else { setScanModal({ type: 'error', message: `No matching patient found for the shared text.` }); setView(user.role === 'Provider' ? 'provider_roster' : 'dashboard'); }
-    } catch (e) { setIsScanning(false); setScanModal({ type: 'error', message: "Text processing failed." }); setView(user.role === 'Provider' ? 'provider_roster' : 'dashboard'); }
+        } else { 
+            setScanModal({ type: 'manual_text', payload: textString }); setSelectedScanPatient('');
+        }
+    } catch (e) { 
+        setIsScanning(false); setScanModal({ type: 'manual_text', payload: textString }); setSelectedScanPatient('');
+    }
   };
 
   const confirmScanModal = async () => {
       if (!scanModal) return;
       const target = selectedScanPatient;
-      if (scanModal.type === 'text') {
+      if (!target) return alert("Please select a patient to save this to.");
+
+      setIsSaving(true); 
+
+      if (scanModal.type === 'text' || scanModal.type === 'manual_text') {
           const dateStr = new Date().toISOString().split('T')[0];
           try {
               await fetch(`${BACKEND_URL}/api/visit/note`, { 
@@ -202,7 +214,10 @@ export default function App() {
               });
               fetchPatientData(target);
           } catch(e) { }
-      } else if (scanModal.type === 'file') { processDocumentUpload(scanModal.payload, target); }
+      } else if (scanModal.type === 'file' || scanModal.type === 'manual_file') { 
+          await processDocumentUpload(scanModal.payload, target); 
+      }
+      setIsSaving(false); 
       setScanModal(null);
   };
 
@@ -304,7 +319,7 @@ export default function App() {
     const formData = new FormData(); formData.append('file', file); formData.append('target_patient', target); formData.append('uploader_name', user?.real_name || "System Share External"); formData.append('force_override', force); 
     try {
       const res = await fetch(`${BACKEND_URL}/api/upload`, { method: 'POST', body: formData }); const data = await res.json();
-      if (data.status === 'warning') { const proceed = window.confirm(`An encounter record already exists for today. Append document for ${target}?`); if (proceed) { processDocumentUpload(file, target, 'true'); } return; }
+      if (data.status === 'warning') { const proceed = window.confirm(`An encounter record already exists for today. Append document for ${target}?`); if (proceed) { await processDocumentUpload(file, target, 'true'); } return; }
       fetchPatientData(target); 
     } catch(err) { alert("Upload failed."); }
   };
@@ -313,7 +328,12 @@ export default function App() {
     const file = e.target.files[0]; if (!file) return;
     const target = activePatient; if (!target) return alert("Please select a patient first.");
     const proceed = window.confirm(`Upload this document for ${target}?`); if (!proceed) { e.target.value = null; return; }
-    processDocumentUpload(file, target); e.target.value = null; 
+    
+    setIsSaving(true); 
+    await processDocumentUpload(file, target); 
+    setIsSaving(false); 
+    
+    e.target.value = null; 
   };
 
   const handleSaveProfile = async () => {
@@ -868,11 +888,41 @@ export default function App() {
         </div>
       )}
 
-      {/* --- 🛎️ IN-APP SCAN CONFIRMATION MODAL (WITH ARRAY SELECTOR) --- */}
+      {/* --- 🛎️ FALLBACK & MULTI-MATCH MODAL --- */}
       {scanModal && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[99999] flex flex-col justify-center items-center px-4 animate-in fade-in duration-300">
           <div className="bg-white p-6 md:p-8 rounded-2xl shadow-2xl max-w-md w-full border border-slate-100 animate-in zoom-in-95 duration-300">
-            {scanModal.type === 'error' ? (
+            
+            {scanModal.type === 'manual_file' || scanModal.type === 'manual_text' ? (
+                <>
+                    <div className="w-16 h-16 bg-orange-100 text-orange-600 rounded-full flex items-center justify-center mx-auto mb-4"><Search size={32} /></div>
+                    <h3 className="text-xl font-bold text-slate-900 text-center mb-2">Manual Selection</h3>
+                    <p className="text-slate-600 text-center text-sm mb-4">The AI couldn't clearly read a patient name from this scan. Who does this belong to?</p>
+                    
+                    <div className="space-y-2 mb-6 max-h-48 overflow-y-auto pr-2">
+                        {(user.role === 'Provider' ? providerRoster : familyMembers).map(p => (
+                            <button 
+                                key={p.name} 
+                                onClick={() => setSelectedScanPatient(p.name)}
+                                className={`w-full p-3 rounded-xl border-2 font-bold transition-all ${selectedScanPatient === p.name ? 'bg-orange-50 border-orange-500 text-orange-700 shadow-sm' : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50 hover:border-slate-300'}`}
+                            >
+                                {p.name}
+                            </button>
+                        ))}
+                    </div>
+                    
+                    <div className="flex gap-3">
+                        <button onClick={() => { setScanModal(null); setView(user.role === 'Provider' ? 'provider_roster' : 'dashboard'); }} className="flex-1 bg-white border border-slate-300 text-slate-700 font-bold py-3 rounded-xl hover:bg-slate-50 transition">Cancel</button>
+                        <button 
+                            disabled={!selectedScanPatient}
+                            onClick={confirmScanModal} 
+                            className={`flex-1 font-bold py-3 rounded-xl transition shadow-sm flex items-center justify-center gap-2 ${!selectedScanPatient ? 'bg-slate-300 text-slate-500 cursor-not-allowed' : 'bg-orange-600 text-white hover:bg-orange-700'}`}
+                        >
+                            <Save size={18}/> Save to Chart
+                        </button>
+                    </div>
+                </>
+            ) : scanModal.type === 'error' ? (
                 <>
                     <div className="w-16 h-16 bg-red-100 text-red-600 rounded-full flex items-center justify-center mx-auto mb-4"><AlertTriangle size={32} /></div>
                     <h3 className="text-xl font-bold text-slate-900 text-center mb-2">Scan Failed</h3>
@@ -884,11 +934,10 @@ export default function App() {
                     <div className="w-16 h-16 bg-blue-100 text-blue-600 rounded-full flex items-center justify-center mx-auto mb-4"><ShieldCheck size={32} /></div>
                     <h3 className="text-xl font-bold text-slate-900 text-center mb-2">Smart Scan Match!</h3>
                     
-                    {/* 🚨 THE CRUCIAL FIX: MULTIPLE MATCH SELECTOR */}
                     {scanModal.patients && scanModal.patients.length > 1 ? (
                         <div className="mb-6">
                             <p className="text-slate-600 text-center text-sm mb-4">We found multiple potential matches in this record. Please select the correct patient chart:</p>
-                            <div className="space-y-2">
+                            <div className="space-y-2 max-h-48 overflow-y-auto pr-2">
                                 {scanModal.patients.map(p => (
                                     <button 
                                         key={p} 
@@ -920,7 +969,18 @@ export default function App() {
         </div>
       )}
 
-      {isScanning && (
+      {/* --- 🚨 GLOBAL LOADING / SAVING OVERLAY --- */}
+      {isSaving && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[99999] flex flex-col justify-center items-center text-white px-4 animate-in fade-in duration-300">
+          <div className="bg-white p-8 rounded-2xl shadow-2xl flex flex-col items-center max-w-sm w-full text-center border border-slate-100">
+            <Activity className="text-blue-600 animate-spin mb-4" size={48} />
+            <h3 className="text-slate-900 font-bold text-lg mb-1">Processing Document</h3>
+            <p className="text-slate-500 text-sm">AI is actively extracting and mapping lab values...</p>
+          </div>
+        </div>
+      )}
+
+      {isScanning && !isSaving && (
         <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-[99999] flex flex-col justify-center items-center text-white px-4 animate-in fade-in duration-300">
           <div className="bg-white p-8 rounded-2xl shadow-2xl flex flex-col items-center max-w-sm w-full text-center border border-slate-100">
             <Activity className="text-blue-600 animate-pulse mb-4 animate-spin" size={48} />

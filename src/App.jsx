@@ -1,9 +1,8 @@
-
 import React, { useState, useEffect, useRef } from 'react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine, Legend } from 'recharts';
 import { Activity, Upload, User, ShieldCheck, UserPlus, Search, Users, ActivitySquare, Syringe, Bug, FlaskConical, AlertTriangle, Ruler, Scale, ClipboardList, Edit3, Save, Stethoscope, FileText, Pill, FileSignature, Settings, Link as LinkIcon, Inbox, Bell, Trash2 } from 'lucide-react';
 
-const BACKEND_URL = "[https://clinical-portal-backend-production.up.railway.app](https://clinical-portal-backend-production.up.railway.app)";
+const BACKEND_URL = "https://clinical-portal-backend-production.up.railway.app";
 
 export default function App() {
   const [splashState, setSplashState] = useState('visible');
@@ -161,6 +160,12 @@ export default function App() {
         body: JSON.stringify({ parent_uid: user.uid, name: newFamilyMember.name, age: parseInt(newFamilyMember.age), gender: newFamilyMember.gender, child_uid: childUid, username: newFamilyMember.username, password: newFamilyMember.password })
       });
       const data = await res.json();
+      
+      const contentType = res.headers.get("content-type");
+      if (!contentType || !contentType.includes("application/json")) {
+          throw new Error("Server is offline or URL is incorrect. (Received HTML)");
+      }
+      
       if (!res.ok) throw new Error(data.detail);
       alert(data.message); fetchFamilyMembers(user.uid); setNewFamilyMember({ name: '', age: '', gender: 'Male', username: '', password: '' }); setView('dashboard');
     } catch (err) { alert(err.message || "Failed to add family member."); }
@@ -254,6 +259,12 @@ export default function App() {
     e.preventDefault(); setAuthError(''); setIsLoading(true);
     try {
       const res = await fetch(`${BACKEND_URL}/api/login`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ username, password }) });
+      
+      const contentType = res.headers.get("content-type");
+      if (!contentType || !contentType.includes("application/json")) {
+          throw new Error("Server is offline or URL is incorrect. (Received HTML)");
+      }
+      
       if (!res.ok) throw new Error("Invalid username or password.");
       const data = await res.json();
       if (!data.uid) data.uid = generateUID(data.real_name, data.role);
@@ -274,6 +285,12 @@ export default function App() {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ username, password, real_name: regName, role: regRole, uid: generatedUID, age: regRole === 'Patient' ? parseInt(regAge) : null, gender: regRole === 'Patient' ? regGender : null, email: regRole === 'Patient' ? regEmail : null, phone: regRole === 'Patient' ? regPhone : null })
       });
+      
+      const contentType = res.headers.get("content-type");
+      if (!contentType || !contentType.includes("application/json")) {
+          throw new Error("Server is offline or URL is incorrect. (Received HTML)");
+      }
+
       if (!res.ok) throw new Error("Username already exists.");
       setTimeout(() => { setIsLoading(false); alert(`Account created!\n\nYour CliniPort ID is: ${generatedUID}`); setView('login'); setPassword(''); }, 800);
     } catch (err) { setIsLoading(false); setAuthError(err.message); }
@@ -893,6 +910,7 @@ export default function App() {
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[99999] flex flex-col justify-center items-center px-4 animate-in fade-in duration-300">
           <div className="bg-white p-6 md:p-8 rounded-2xl shadow-2xl max-w-md w-full border border-slate-100 animate-in zoom-in-95 duration-300">
             
+            {/* MANUAL FALLBACK UI */}
             {scanModal.type === 'manual_file' || scanModal.type === 'manual_text' ? (
                 <>
                     <div className="w-16 h-16 bg-orange-100 text-orange-600 rounded-full flex items-center justify-center mx-auto mb-4"><Search size={32} /></div>

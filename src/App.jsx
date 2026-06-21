@@ -159,13 +159,13 @@ export default function App() {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ parent_uid: user.uid, name: newFamilyMember.name, age: parseInt(newFamilyMember.age), gender: newFamilyMember.gender, child_uid: childUid, username: newFamilyMember.username, password: newFamilyMember.password })
       });
-      const data = await res.json();
       
       const contentType = res.headers.get("content-type");
       if (!contentType || !contentType.includes("application/json")) {
           throw new Error("Server is offline or URL is incorrect. (Received HTML)");
       }
       
+      const data = await res.json();
       if (!res.ok) throw new Error(data.detail);
       alert(data.message); fetchFamilyMembers(user.uid); setNewFamilyMember({ name: '', age: '', gender: 'Male', username: '', password: '' }); setView('dashboard');
     } catch (err) { alert(err.message || "Failed to add family member."); }
@@ -952,6 +952,7 @@ export default function App() {
                     <div className="w-16 h-16 bg-blue-100 text-blue-600 rounded-full flex items-center justify-center mx-auto mb-4"><ShieldCheck size={32} /></div>
                     <h3 className="text-xl font-bold text-slate-900 text-center mb-2">Smart Scan Match!</h3>
                     
+                    {/* 🚨 MULTIPLE MATCH SELECTOR */}
                     {scanModal.patients && scanModal.patients.length > 1 ? (
                         <div className="mb-6">
                             <p className="text-slate-600 text-center text-sm mb-4">We found multiple potential matches in this record. Please select the correct patient chart:</p>

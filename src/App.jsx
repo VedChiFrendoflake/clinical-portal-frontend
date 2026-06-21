@@ -58,6 +58,20 @@ export default function App() {
   const [orderInput, setOrderInput] = useState({ test_name: '', reason: '' });
   const [isScanning, setIsScanning] = useState(false);
 
+  // --- 💣 THE CACHE NUKE ---
+  const hardResetApp = async () => {
+    if ('serviceWorker' in navigator) {
+      const registrations = await navigator.serviceWorker.getRegistrations();
+      for (let registration of registrations) { await registration.unregister(); }
+    }
+    if ('caches' in window) {
+      const cacheNames = await caches.keys();
+      for (let cacheName of cacheNames) { await caches.delete(cacheName); }
+    }
+    localStorage.clear();
+    window.location.reload(true); 
+  };
+
   useEffect(() => {
     const fadeTimer = setTimeout(() => { setSplashState('fading'); }, 2000);
     const hideTimer = setTimeout(() => { setSplashState('hidden'); }, 2500);
@@ -114,7 +128,7 @@ export default function App() {
     }
   }, [patientData]);
 
-  // --- 📸 CENTRALIZED SMART SCANNER WITH ROSTER REDIRECT ---
+  // --- 📸 CENTRALIZED FILE SMART SCANNER ---
   const handleSmartScan = async (file) => {
     setIsScanning(true);
     const formData = new FormData(); 
@@ -127,23 +141,46 @@ export default function App() {
         setIsScanning(false);
         if (data.matched_patient) {
             const confirmAutoFile = window.confirm(`Smart Scan Results:\n\nWe detected this document belongs to "${data.matched_patient}" from your roster.\n\nWould you like to upload it to their chart?`);
-            if (confirmAutoFile) {
-                processDocumentUpload(file, data.matched_patient);
-            } else {
-                alert("Please select the patient manually from your roster.");
-                setView('provider_roster'); // Redirect to roster!
-            }
+            if (confirmAutoFile) { processDocumentUpload(file, data.matched_patient); } 
+            else { alert("Please select the patient manually from your roster."); setView('provider_roster'); }
         } else { 
             alert("Smart Scan couldn't find a matching patient from your roster in this document. Please select the patient manually.");
-            setView('provider_roster'); // Redirect to roster!
+            setView('provider_roster');
         }
     } catch (err) { 
-        setIsScanning(false); 
-        alert("Smart Scan failed. Please select a patient manually.");
-        setView('provider_roster'); // Redirect to roster!
+        setIsScanning(false); alert("Smart Scan failed. Please select a patient manually."); setView('provider_roster');
     }
   };
 
+  // --- 📝 TEXT SMART SCANNER ---
+  const handleTextSmartScan = async (textString) => {
+    setIsScanning(true);
+    try {
+      const res = await fetch(`${BACKEND_URL}/api/roster/${user.uid}`);
+      const roster = await res.json();
+      
+      let matchedPatient = null;
+      for (let pt of roster) {
+          if (textString.toLowerCase().includes(pt.name.toLowerCase())) { matchedPatient = pt.name; break; }
+      }
+      setIsScanning(false);
+      
+      if (matchedPatient) {
+          const confirmAutoFile = window.confirm(`Smart Scan Results:\n\nWe detected "${matchedPatient}" from your roster in the shared text.\n\nSave this directly to their encounter notes?`);
+          if (confirmAutoFile) {
+              const dateStr = new Date().toISOString().split('T')[0];
+              await fetch(`${BACKEND_URL}/api/visit/note`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ target_patient: matchedPatient, visit_date: dateStr, note: `[Shared Text Message]:\n${textString}` }) });
+              alert(`Saved to ${matchedPatient}'s chart!`);
+              fetchPatientData(matchedPatient);
+          } else { setView('provider_roster'); }
+      } else {
+          alert(`Shared Text:\n"${textString}"\n\nNo matching patient found on your roster. Please select a patient manually.`);
+          setView('provider_roster');
+      }
+    } catch (e) { setIsScanning(false); alert("Text scan failed."); setView('provider_roster'); }
+  };
+
+  // --- 🔄 PWA SHARE INTERCEPTOR ---
   useEffect(() => {
     if (!user) return; 
     const urlParams = new URLSearchParams(window.location.search);
@@ -151,14 +188,14 @@ export default function App() {
       (async () => {
         const cache = await caches.open('shared-files-cache'); 
         const target = user.role === 'Patient' ? user.real_name : activePatient;
-        const cachedFile = await cache.match('/latest-shared-file');
         
+        const cachedFile = await cache.match('/latest-shared-file');
         if (cachedFile) {
           const blob = await cachedFile.blob();
           const filename = cachedFile.headers.get('X-File-Name') || 'shared_document.pdf';
           const file = new File([blob], filename, { type: blob.type });
           if (target && target !== '') { processDocumentUpload(file, target); } 
-          else { handleSmartScan(file); } // Call the centralized scanner!
+          else { handleSmartScan(file); } 
           await cache.delete('/latest-shared-file');
         }
         
@@ -171,10 +208,7 @@ export default function App() {
               await fetch(`${BACKEND_URL}/api/visit/note`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ target_patient: target, visit_date: dateStr, note: `[Shared Text Message via Forward Menu]:\n${sharedTextString}` }) });
               alert(`Text snippet successfully appended to ${target}'s encounter notes!`); fetchPatientData(target);
             } catch (err) { alert("Failed to append shared text string to the backend server notes."); }
-          } else { 
-            alert(`Text snippet received via Share Menu:\n\n"${sharedTextString}"\n\nPlease select a patient chart profile first to save this message data.`); 
-            setView('provider_roster');
-          }
+          } else { handleTextSmartScan(sharedTextString); }
           await cache.delete('/latest-shared-text'); 
         }
         window.history.replaceState({}, document.title, "/");
@@ -191,9 +225,7 @@ export default function App() {
           const target = user?.role === 'Patient' ? user.real_name : activePatient;
           if (target && target !== "") {
             processDocumentUpload(file, target); alert(`Successfully queued ${file.name} for ${target}!`);
-          } else {
-             handleSmartScan(file); // Call the centralized scanner!
-          }
+          } else { handleSmartScan(file); }
         } catch (err) { alert("Failed to process external file access."); setView('provider_roster'); }
       });
     }
@@ -411,6 +443,7 @@ export default function App() {
               <span className="text-xs font-mono font-bold bg-slate-100 text-slate-600 px-3 py-1 rounded-full border border-slate-200 shadow-inner mr-2 hidden sm:block">ID: {isIdUnlocked ? user.uid : '••••••••'}</span>
               <button onClick={() => setTextSize(textSize === 'normal' ? 'large' : 'normal')} className="text-slate-400 hover:text-blue-600 md:mr-4"><Settings size={18} /></button>
               <span className="text-xs md:text-sm font-medium bg-slate-100 px-3 py-1 rounded-full">{user.real_name}</span>
+              <button onClick={hardResetApp} className="text-sm text-slate-400 hover:text-orange-500 font-bold ml-2 border-l border-slate-200 pl-3">Reset App</button>
               <button onClick={() => { localStorage.removeItem('cliniport_user'); setUser(null); setView('login'); }} className="text-sm text-slate-500 hover:text-red-500 font-medium">Log Out</button>
             </div>
           </nav>

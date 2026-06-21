@@ -38,7 +38,6 @@ export default function App() {
   const [familyMembers, setFamilyMembers] = useState([]);
   const [newFamilyMember, setNewFamilyMember] = useState({ name: '', age: '', gender: 'Male', username: '', password: '' });
 
-  // --- 🔔 INBOX & NOTIFICATION STATE ---
   const [pendingRequests, setPendingRequests] = useState([]); 
   const [notifications, setNotifications] = useState([]);
   const prevNotifCount = useRef(0);
@@ -49,7 +48,10 @@ export default function App() {
   const [unlockError, setUnlockError] = useState('');
   const [isUnlocking, setIsUnlocking] = useState(false);
 
+  // --- 🛎️ ARRAY-BASED MODAL STATE ---
   const [scanModal, setScanModal] = useState(null); 
+  const [selectedScanPatient, setSelectedScanPatient] = useState('');
+
   const [vitalsInput, setVitalsInput] = useState({ height: '', weight: '' });
   const [isEditingProfile, setIsEditingProfile] = useState(false);
   const [profileForm, setProfileForm] = useState({ genetic_conditions: '', chronic_diseases: '', allergies: '', notes: '' });
@@ -73,8 +75,6 @@ export default function App() {
   useEffect(() => {
     const fadeTimer = setTimeout(() => { setSplashState('fading'); }, 2000);
     const hideTimer = setTimeout(() => { setSplashState('hidden'); }, 2500);
-    
-    // Request Push Notification Permissions on Boot
     if ("Notification" in window && Notification.permission !== "granted" && Notification.permission !== "denied") {
         Notification.requestPermission();
     }
@@ -97,13 +97,9 @@ export default function App() {
     }
   }, [user]);
 
-  // --- 📡 BACKGROUND LIVE POLLING ---
   useEffect(() => {
     if (!user || user.role !== 'Patient') return;
-    const interval = setInterval(() => {
-        fetchPendingRequests(user.uid);
-        fetchNotifications(user.uid);
-    }, 5000); // Check the server every 5 seconds silently
+    const interval = setInterval(() => { fetchPendingRequests(user.uid); fetchNotifications(user.uid); }, 5000); 
     return () => clearInterval(interval);
   }, [user]);
 
@@ -111,14 +107,9 @@ export default function App() {
     try {
       const res = await fetch(`${BACKEND_URL}/api/connect/pending/${uid}`);
       if (res.ok) { 
-          const data = await res.json(); 
-          setPendingRequests(data); 
-          
-          // Trigger OS Notification for new Requests
-          if (data.length > prevReqCount.current && prevReqCount.current !== 0) {
-              if (Notification.permission === 'granted') {
-                  new Notification("New Connection Request", { body: `Dr. ${data[data.length-1].doctorName} is requesting chart access.`, icon: '/logo192.png' });
-              }
+          const data = await res.json(); setPendingRequests(data); 
+          if (data.length > prevReqCount.current && prevReqCount.current !== 0 && Notification.permission === 'granted') {
+              new Notification("New Connection Request", { body: `Dr. ${data[data.length-1].doctorName} is requesting chart access.`, icon: '/logo192.png' });
           }
           prevReqCount.current = data.length;
       }
@@ -129,15 +120,9 @@ export default function App() {
     try {
       const res = await fetch(`${BACKEND_URL}/api/notifications/${uid}`);
       if (res.ok) { 
-          const data = await res.json(); 
-          setNotifications(data); 
-          
-          // Trigger OS Notification for new Alerts (Uploads, Labs, Rx)
-          if (data.length > prevNotifCount.current && prevNotifCount.current !== 0) {
-              const newest = data[0]; // Backend inserts at index 0
-              if (Notification.permission === 'granted') {
-                  new Notification(newest.title, { body: newest.message, icon: '/logo192.png' });
-              }
+          const data = await res.json(); setNotifications(data); 
+          if (data.length > prevNotifCount.current && prevNotifCount.current !== 0 && Notification.permission === 'granted') {
+              new Notification(data[0].title, { body: data[0].message, icon: '/logo192.png' });
           }
           prevNotifCount.current = data.length;
       }
@@ -145,11 +130,7 @@ export default function App() {
   };
 
   const handleClearNotifications = async () => {
-      try {
-          await fetch(`${BACKEND_URL}/api/notifications/clear/${user.uid}`, { method: 'POST' });
-          setNotifications([]);
-          prevNotifCount.current = 0;
-      } catch (e) {}
+      try { await fetch(`${BACKEND_URL}/api/notifications/clear/${user.uid}`, { method: 'POST' }); setNotifications([]); prevNotifCount.current = 0; } catch (e) {}
   };
 
   useEffect(() => {
@@ -165,7 +146,7 @@ export default function App() {
     try {
       const res = await fetch(`${BACKEND_URL}/api/family/${uid}`);
       if (res.ok) { const data = await res.json(); setFamilyMembers(data); }
-    } catch (err) { console.error("Failed to fetch family", err); }
+    } catch (err) { }
   };
 
   const handleAddFamilyMember = async (e) => {
@@ -188,7 +169,10 @@ export default function App() {
     if (user.role === 'Provider') { formData.append('provider_uid', user.uid); } else { formData.append('patient_uid', user.uid); }
     try {
         const res = await fetch(`${BACKEND_URL}/api/predict-patient`, { method: 'POST', body: formData }); const data = await res.json(); setIsScanning(false);
-        if (data.matched_patient) { setScanModal({ type: 'file', patient: data.matched_patient, payload: file }); } 
+        if (data.matched_patients && data.matched_patients.length > 0) { 
+            setScanModal({ type: 'file', patients: data.matched_patients, payload: file }); 
+            setSelectedScanPatient(data.matched_patients[0]); 
+        } 
         else { setScanModal({ type: 'error', message: `Smart Scan couldn't find a matching patient in this document.` }); setView(user.role === 'Provider' ? 'provider_roster' : 'dashboard'); }
     } catch (err) { setIsScanning(false); setScanModal({ type: 'error', message: "Smart Scan failed." }); setView(user.role === 'Provider' ? 'provider_roster' : 'dashboard'); }
   };
@@ -198,23 +182,27 @@ export default function App() {
     if (user.role === 'Provider') { formData.append('provider_uid', user.uid); } else { formData.append('patient_uid', user.uid); } 
     try {
         const res = await fetch(`${BACKEND_URL}/api/predict-patient`, { method: 'POST', body: formData }); const data = await res.json(); setIsScanning(false);
-        if (data.matched_patient) { setScanModal({ type: 'text', patient: data.matched_patient, payload: textString }); } 
+        if (data.matched_patients && data.matched_patients.length > 0) { 
+            setScanModal({ type: 'text', patients: data.matched_patients, payload: textString }); 
+            setSelectedScanPatient(data.matched_patients[0]); 
+        } 
         else { setScanModal({ type: 'error', message: `No matching patient found for the shared text.` }); setView(user.role === 'Provider' ? 'provider_roster' : 'dashboard'); }
     } catch (e) { setIsScanning(false); setScanModal({ type: 'error', message: "Text processing failed." }); setView(user.role === 'Provider' ? 'provider_roster' : 'dashboard'); }
   };
 
   const confirmScanModal = async () => {
       if (!scanModal) return;
+      const target = selectedScanPatient;
       if (scanModal.type === 'text') {
           const dateStr = new Date().toISOString().split('T')[0];
           try {
               await fetch(`${BACKEND_URL}/api/visit/note`, { 
                   method: 'POST', headers: { 'Content-Type': 'application/json' }, 
-                  body: JSON.stringify({ target_patient: scanModal.patient, visit_date: dateStr, note: `[Shared Text Message]:\n${scanModal.payload}`, provider_name: user?.real_name || "Unknown Provider" }) 
+                  body: JSON.stringify({ target_patient: target, visit_date: dateStr, note: `[Shared Text Message]:\n${scanModal.payload}`, provider_name: user?.real_name || "Unknown Provider" }) 
               });
-              fetchPatientData(scanModal.patient);
+              fetchPatientData(target);
           } catch(e) { }
-      } else if (scanModal.type === 'file') { processDocumentUpload(scanModal.payload, scanModal.patient); }
+      } else if (scanModal.type === 'file') { processDocumentUpload(scanModal.payload, target); }
       setScanModal(null);
   };
 
@@ -225,7 +213,6 @@ export default function App() {
       setIsScanning(true); 
       (async () => {
         const cache = await caches.open('shared-files-cache'); 
-        const target = activePatient || (user.role === 'Patient' ? user.real_name : '');
         const cachedFile = await cache.match('/latest-shared-file');
         const cachedText = await cache.match('/latest-shared-text');
 
@@ -242,7 +229,7 @@ export default function App() {
         window.history.replaceState({}, document.title, "/");
       })();
     }
-  }, [user, activePatient]); 
+  }, [user]); 
 
   const fetchRoster = async (uid) => {
     try { const res = await fetch(`${BACKEND_URL}/api/roster/${uid}`); if (res.ok) { const data = await res.json(); setProviderRoster(data); } } catch (err) { }
@@ -453,7 +440,6 @@ export default function App() {
               </div>
               <hr className="mb-4 border-slate-100" />
 
-              {/* --- 👨‍👩‍👧‍👦 FAMILY SIDEBAR --- */}
               {user.role === 'Patient' && (
                 <div className="mb-4">
                   <p className="text-xs text-slate-400 font-bold uppercase tracking-wider mb-2 px-1">My Family & Dependents</p>
@@ -483,7 +469,6 @@ export default function App() {
                    </>
                 )}
                 
-                {/* 🔔 PERMANENT UNIFIED INBOX BUTTON */}
                 {user.role === 'Patient' && (
                      <li>
                         <button onClick={() => setView('patient_inbox')} className={`w-full text-left p-3 rounded-xl transition flex items-center justify-between ${view === 'patient_inbox' ? 'bg-emerald-50 text-emerald-700 font-bold' : 'hover:bg-slate-50 text-slate-600'}`}>
@@ -547,11 +532,8 @@ export default function App() {
                  </div>
               )}
 
-              {/* --- 🔔 THE NEW UNIFIED INBOX VIEW --- */}
               {view === 'patient_inbox' && (
                  <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
-                     
-                     {/* Section 1: Urgent Action Items */}
                      <div className="bg-white p-6 md:p-8 rounded-2xl shadow-sm border border-slate-100">
                        <h3 className="text-xl font-bold mb-6 flex items-center gap-2"><UserPlus className="text-blue-600"/> Action Required</h3>
                        {pendingRequests.length === 0 ? ( <p className="text-slate-500 py-4">No pending provider requests.</p> ) : (
@@ -572,7 +554,6 @@ export default function App() {
                        )}
                      </div>
 
-                     {/* Section 2: Recent Activity Alerts */}
                      <div className="bg-white p-6 md:p-8 rounded-2xl shadow-sm border border-slate-100">
                        <div className="flex justify-between items-center mb-6">
                            <h3 className="text-xl font-bold flex items-center gap-2"><Bell className="text-emerald-600"/> Recent Activity</h3>
@@ -887,6 +868,7 @@ export default function App() {
         </div>
       )}
 
+      {/* --- 🛎️ IN-APP SCAN CONFIRMATION MODAL (WITH ARRAY SELECTOR) --- */}
       {scanModal && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[99999] flex flex-col justify-center items-center px-4 animate-in fade-in duration-300">
           <div className="bg-white p-6 md:p-8 rounded-2xl shadow-2xl max-w-md w-full border border-slate-100 animate-in zoom-in-95 duration-300">
@@ -901,13 +883,34 @@ export default function App() {
                 <>
                     <div className="w-16 h-16 bg-blue-100 text-blue-600 rounded-full flex items-center justify-center mx-auto mb-4"><ShieldCheck size={32} /></div>
                     <h3 className="text-xl font-bold text-slate-900 text-center mb-2">Smart Scan Match!</h3>
-                    <p className="text-slate-600 text-center mb-6">
-                        We detected <strong className="text-blue-700">{scanModal.patient}</strong> in the shared {scanModal.type === 'text' ? 'message' : 'document'}.
-                    </p>
+                    
+                    {/* 🚨 THE CRUCIAL FIX: MULTIPLE MATCH SELECTOR */}
+                    {scanModal.patients && scanModal.patients.length > 1 ? (
+                        <div className="mb-6">
+                            <p className="text-slate-600 text-center text-sm mb-4">We found multiple potential matches in this record. Please select the correct patient chart:</p>
+                            <div className="space-y-2">
+                                {scanModal.patients.map(p => (
+                                    <button 
+                                        key={p} 
+                                        onClick={() => setSelectedScanPatient(p)}
+                                        className={`w-full p-3 rounded-xl border-2 font-bold transition-all ${selectedScanPatient === p ? 'bg-blue-50 border-blue-500 text-blue-700 shadow-sm' : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50 hover:border-slate-300'}`}
+                                    >
+                                        {p}
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
+                    ) : (
+                        <p className="text-slate-600 text-center mb-6">
+                            We detected <strong className="text-blue-700">{scanModal.patients?.[0]}</strong> in the shared {scanModal.type === 'text' ? 'message' : 'document'}.
+                        </p>
+                    )}
+
                     {scanModal.type === 'text' && (
                         <div className="bg-slate-50 p-3 rounded-lg border border-slate-200 mb-6 max-h-32 overflow-y-auto"><p className="text-xs text-slate-500 italic whitespace-pre-wrap">"{scanModal.payload}"</p></div>
                     )}
-                    <div className="flex gap-3">
+                    
+                    <div className="flex gap-3 mt-4">
                         <button onClick={() => { setScanModal(null); setView(user.role === 'Provider' ? 'provider_roster' : 'dashboard'); }} className="flex-1 bg-white border border-slate-300 text-slate-700 font-bold py-3 rounded-xl hover:bg-slate-50 transition">Cancel</button>
                         <button onClick={confirmScanModal} className="flex-1 bg-blue-600 text-white font-bold py-3 rounded-xl hover:bg-blue-700 transition shadow-sm flex items-center justify-center gap-2"><Save size={18}/> Save to Chart</button>
                     </div>

@@ -7,6 +7,7 @@ const BACKEND_URL = "https://clinical-portal-backend-production.up.railway.app";
 export default function App() {
   const [splashState, setSplashState] = useState('visible');
   
+  // --- 💾 PERSISTED USER STATE ---
   const [user, setUser] = useState(() => {
     const savedUser = localStorage.getItem('cliniport_user');
     return savedUser ? JSON.parse(savedUser) : null;
@@ -36,10 +37,12 @@ export default function App() {
   const [searchQuery, setSearchQuery] = useState('');
   const [dashTab, setDashTab] = useState('profile'); 
 
+  // --- CONNECTION & ROSTER STATE ---
   const [connectIdInput, setConnectIdInput] = useState('');
   const [providerRoster, setProviderRoster] = useState([]); 
   const [pendingRequests, setPendingRequests] = useState([]); 
 
+  // --- 🔐 SECURE ID UNLOCK STATE ---
   const [isIdUnlocked, setIsIdUnlocked] = useState(false);
   const [unlockPassword, setUnlockPassword] = useState('');
   const [unlockError, setUnlockError] = useState('');
@@ -175,12 +178,22 @@ export default function App() {
     }
   };
 
+  // --- 🏥 SAVE MODAL ACTION (WITH DYNAMIC PROVIDER NAME) ---
   const confirmScanModal = async () => {
       if (!scanModal) return;
       if (scanModal.type === 'text') {
           const dateStr = new Date().toISOString().split('T')[0];
           try {
-              await fetch(`${BACKEND_URL}/api/visit/note`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ target_patient: scanModal.patient, visit_date: dateStr, note: `[Shared Text Message]:\n${scanModal.payload}` }) });
+              await fetch(`${BACKEND_URL}/api/visit/note`, { 
+                  method: 'POST', 
+                  headers: { 'Content-Type': 'application/json' }, 
+                  body: JSON.stringify({ 
+                      target_patient: scanModal.patient, 
+                      visit_date: dateStr, 
+                      note: `[Shared Text Message]:\n${scanModal.payload}`,
+                      provider_name: user?.real_name || "Unknown Provider" // 👈 Dynamic Name Used
+                  }) 
+              });
               fetchPatientData(scanModal.patient);
           } catch(e) { console.error(e); }
       } 
@@ -194,7 +207,6 @@ export default function App() {
     const urlParams = new URLSearchParams(window.location.search);
     if (urlParams.get('incoming_share') === 'true') {
       
-      // 🚨 INSTANTLY SHOW UI SO WE KNOW IT WOKE UP
       setIsScanning(true); 
 
       (async () => {
@@ -217,7 +229,16 @@ export default function App() {
           if (target && target !== '') {
             try {
               const dateStr = new Date().toISOString().split('T')[0];
-              await fetch(`${BACKEND_URL}/api/visit/note`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ target_patient: target, visit_date: dateStr, note: `[Shared Text Message via Forward Menu]:\n${sharedTextString}` }) });
+              await fetch(`${BACKEND_URL}/api/visit/note`, { 
+                  method: 'POST', 
+                  headers: { 'Content-Type': 'application/json' }, 
+                  body: JSON.stringify({ 
+                      target_patient: target, 
+                      visit_date: dateStr, 
+                      note: `[Shared Text Message via Forward Menu]:\n${sharedTextString}`,
+                      provider_name: user?.real_name || "Unknown Provider" // 👈 Dynamic Name Used
+                  }) 
+              });
               fetchPatientData(target);
               setIsScanning(false);
             } catch (err) { setIsScanning(false); setScanModal({ type: 'error', message: "Failed to append shared text to the server." }); }
@@ -227,7 +248,6 @@ export default function App() {
           await cache.delete('/latest-shared-text'); 
         } 
         else {
-          // 🚨 IF CACHE WAS EMPTY, POP UP THE ERROR MODAL INSTEAD OF FAILING SILENTLY
           setIsScanning(false);
           setScanModal({ type: 'error', message: "The share was intercepted, but the payload was completely empty. Android may have blocked the read operation." });
         }
@@ -360,7 +380,21 @@ export default function App() {
 
   const handleSaveVisitNote = async (date) => {
     const target = user.role === 'Patient' ? user.real_name : activePatient;
-    try { const res = await fetch(`${BACKEND_URL}/api/visit/note`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ target_patient: target, visit_date: date, note: visitNotes[date] }) }); const data = await res.json(); alert(data.message); fetchPatientData(target); } catch (err) { alert("Failed to save note."); }
+    try { 
+        const res = await fetch(`${BACKEND_URL}/api/visit/note`, { 
+            method: 'POST', 
+            headers: { 'Content-Type': 'application/json' }, 
+            body: JSON.stringify({ 
+                target_patient: target, 
+                visit_date: date, 
+                note: visitNotes[date],
+                provider_name: user?.real_name || "Unknown Provider" // 👈 Dynamic Name Used
+            }) 
+        }); 
+        const data = await res.json(); 
+        alert(data.message); 
+        fetchPatientData(target); 
+    } catch (err) { alert("Failed to save note."); }
   };
 
   const handleLogVitals = async (e) => {

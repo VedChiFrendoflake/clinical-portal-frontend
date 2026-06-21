@@ -19,20 +19,6 @@
     "health",
     "productivity"
   ],
-  "prefer_related_applications": true,
-  "related_applications": [
-    {
-      "platform": "play",
-      "url": "https://play.google.com/store/apps/details?id=com.clinicalportal.app",
-      "id": "com.clinicalportal.app"
-    }
-  ],
-  "iarc_rating_id": "e84b072d-71b3-4d3e-86ae-31a8ce4e53b7",
-  "scope_extensions": [
-    {
-      "origin": "*.up.railway.app"
-    }
-  ],
   "theme_color": "#16c4e8",
   "background_color": "#2e45f0",
   "icons": [

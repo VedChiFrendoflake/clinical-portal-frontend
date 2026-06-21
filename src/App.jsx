@@ -48,6 +48,9 @@ export default function App() {
   const [unlockError, setUnlockError] = useState('');
   const [isUnlocking, setIsUnlocking] = useState(false);
 
+  // --- 🛎️ IN-APP DIALOG STATE ---
+  const [scanModal, setScanModal] = useState(null); 
+
   const [vitalsInput, setVitalsInput] = useState({ height: '', weight: '' });
   const [parentsHeight, setParentsHeight] = useState({ mom: '', dad: '' });
   const [predictedHeight, setPredictedHeight] = useState(null);
@@ -140,15 +143,15 @@ export default function App() {
         const data = await res.json(); 
         setIsScanning(false);
         if (data.matched_patient) {
-            const confirmAutoFile = window.confirm(`Smart Scan Results:\n\nWe detected this document belongs to "${data.matched_patient}" from your roster.\n\nWould you like to upload it to their chart?`);
-            if (confirmAutoFile) { processDocumentUpload(file, data.matched_patient); } 
-            else { alert("Please select the patient manually from your roster."); setView('provider_roster'); }
+            setScanModal({ type: 'file', patient: data.matched_patient, payload: file });
         } else { 
-            alert("Smart Scan couldn't find a matching patient from your roster in this document. Please select the patient manually.");
+            setScanModal({ type: 'error', message: "Smart Scan couldn't find a matching patient from your roster in this document. Please select the patient manually." });
             setView('provider_roster');
         }
     } catch (err) { 
-        setIsScanning(false); alert("Smart Scan failed. Please select a patient manually."); setView('provider_roster');
+        setIsScanning(false); 
+        setScanModal({ type: 'error', message: "Smart Scan failed. Please select a patient manually." }); 
+        setView('provider_roster');
     }
   };
 
@@ -165,20 +168,29 @@ export default function App() {
         setIsScanning(false);
         
         if (data.matched_patient) {
-            const confirmAutoFile = window.confirm(`Smart Scan Results:\n\nWe detected "${data.matched_patient}" from your roster in the shared text.\n\nSave this directly to their encounter notes?`);
-            if (confirmAutoFile) {
-                const dateStr = new Date().toISOString().split('T')[0];
-                await fetch(`${BACKEND_URL}/api/visit/note`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ target_patient: data.matched_patient, visit_date: dateStr, note: `[Shared Text Message]:\n${textString}` }) });
-                alert(`Saved to ${data.matched_patient}'s chart!`);
-                fetchPatientData(data.matched_patient);
-            } else { setView('provider_roster'); }
+            setScanModal({ type: 'text', patient: data.matched_patient, payload: textString });
         } else {
-            alert(`Shared Text:\n"${textString}"\n\nNo matching patient found on your roster. Please select a patient manually.`);
+            setScanModal({ type: 'error', message: `No matching patient found on your roster for the shared text:\n\n"${textString}"\n\nPlease select a patient manually.` });
             setView('provider_roster');
         }
     } catch (e) {
-        setIsScanning(false); alert("Text processing failed."); setView('provider_roster');
+        setIsScanning(false); 
+        setScanModal({ type: 'error', message: "Text processing failed." }); 
+        setView('provider_roster');
     }
+  };
+
+  const confirmScanModal = async () => {
+      if (!scanModal) return;
+      if (scanModal.type === 'text') {
+          const dateStr = new Date().toISOString().split('T')[0];
+          try {
+              await fetch(`${BACKEND_URL}/api/visit/note`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ target_patient: scanModal.patient, visit_date: dateStr, note: `[Shared Text Message]:\n${scanModal.payload}` }) });
+              fetchPatientData(scanModal.patient);
+          } catch(e) { console.error(e); }
+      } 
+      else if (scanModal.type === 'file') { processDocumentUpload(scanModal.payload, scanModal.patient); }
+      setScanModal(null);
   };
 
   // --- 🔄 PWA SHARE INTERCEPTOR ---
@@ -207,7 +219,7 @@ export default function App() {
             try {
               const dateStr = new Date().toISOString().split('T')[0];
               await fetch(`${BACKEND_URL}/api/visit/note`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ target_patient: target, visit_date: dateStr, note: `[Shared Text Message via Forward Menu]:\n${sharedTextString}` }) });
-              alert(`Text snippet successfully appended to ${target}'s encounter notes!`); fetchPatientData(target);
+              fetchPatientData(target);
             } catch (err) { alert("Failed to append shared text string to the backend server notes."); }
           } else { handleTextSmartScan(sharedTextString); }
           await cache.delete('/latest-shared-text'); 
@@ -225,7 +237,7 @@ export default function App() {
           const fileHandle = launchParams.files[0]; const file = await fileHandle.getFile();
           const target = user?.role === 'Patient' ? user.real_name : activePatient;
           if (target && target !== "") {
-            processDocumentUpload(file, target); alert(`Successfully queued ${file.name} for ${target}!`);
+            processDocumentUpload(file, target);
           } else { handleSmartScan(file); }
         } catch (err) { alert("Failed to process external file access."); setView('provider_roster'); }
       });
@@ -322,7 +334,7 @@ export default function App() {
     try {
       const res = await fetch(`${BACKEND_URL}/api/upload`, { method: 'POST', body: formData }); const data = await res.json();
       if (data.status === 'warning') { const proceed = window.confirm(`An encounter record already exists for today. Append document for ${target}?`); if (proceed) { processDocumentUpload(file, target, 'true'); } return; }
-      alert(data.message); fetchPatientData(target); 
+      fetchPatientData(target); 
     } catch(err) { alert("Upload failed. Ensure backend cloud server is running."); }
   };
 
@@ -837,12 +849,50 @@ export default function App() {
         </div>
       )}
 
+      {/* --- 🛎️ IN-APP SCAN CONFIRMATION MODAL --- */}
+      {scanModal && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[99999] flex flex-col justify-center items-center px-4 animate-in fade-in duration-300">
+          <div className="bg-white p-6 md:p-8 rounded-2xl shadow-2xl max-w-md w-full border border-slate-100 animate-in zoom-in-95 duration-300">
+            
+            {scanModal.type === 'error' ? (
+                <>
+                    <div className="w-16 h-16 bg-red-100 text-red-600 rounded-full flex items-center justify-center mx-auto mb-4"><AlertTriangle size={32} /></div>
+                    <h3 className="text-xl font-bold text-slate-900 text-center mb-2">Scan Failed</h3>
+                    <p className="text-slate-600 text-sm text-center mb-6 whitespace-pre-wrap">{scanModal.message}</p>
+                    <button onClick={() => setScanModal(null)} className="w-full bg-slate-800 text-white font-bold py-3 rounded-xl hover:bg-slate-900 transition shadow-sm">Acknowledge</button>
+                </>
+            ) : (
+                <>
+                    <div className="w-16 h-16 bg-blue-100 text-blue-600 rounded-full flex items-center justify-center mx-auto mb-4"><ShieldCheck size={32} /></div>
+                    <h3 className="text-xl font-bold text-slate-900 text-center mb-2">Smart Scan Match!</h3>
+                    <p className="text-slate-600 text-center mb-6">
+                        We detected <strong className="text-blue-700">{scanModal.patient}</strong> from your roster in the shared {scanModal.type === 'text' ? 'message' : 'document'}.
+                    </p>
+                    
+                    {scanModal.type === 'text' && (
+                        <div className="bg-slate-50 p-3 rounded-lg border border-slate-200 mb-6 max-h-32 overflow-y-auto">
+                            <p className="text-xs text-slate-500 italic whitespace-pre-wrap">"{scanModal.payload}"</p>
+                        </div>
+                    )}
+
+                    <div className="flex gap-3">
+                        <button onClick={() => { setScanModal(null); setView('provider_roster'); }} className="flex-1 bg-white border border-slate-300 text-slate-700 font-bold py-3 rounded-xl hover:bg-slate-50 transition">Cancel</button>
+                        <button onClick={confirmScanModal} className="flex-1 bg-blue-600 text-white font-bold py-3 rounded-xl hover:bg-blue-700 transition shadow-sm flex items-center justify-center gap-2">
+                            <Save size={18}/> Save to Chart
+                        </button>
+                    </div>
+                </>
+            )}
+          </div>
+        </div>
+      )}
+
       {isScanning && (
         <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-[99999] flex flex-col justify-center items-center text-white px-4 animate-in fade-in duration-300">
           <div className="bg-white p-8 rounded-2xl shadow-2xl flex flex-col items-center max-w-sm w-full text-center border border-slate-100">
             <Activity className="text-blue-600 animate-pulse mb-4 animate-spin" size={48} />
             <h3 className="text-slate-900 font-bold text-lg mb-1">AI Smart Scanning Active</h3>
-            <p className="text-slate-500 text-sm">Reading the document layout to auto-detect the patient's identity...</p>
+            <p className="text-slate-500 text-sm">Cross-referencing shared data with your assigned roster...</p>
           </div>
         </div>
       )}

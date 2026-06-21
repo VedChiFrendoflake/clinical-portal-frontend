@@ -155,29 +155,30 @@ export default function App() {
   // --- 📝 TEXT SMART SCANNER ---
   const handleTextSmartScan = async (textString) => {
     setIsScanning(true);
+    const formData = new FormData();
+    formData.append('text_payload', textString);
+    if (user && user.role === 'Provider') { formData.append('provider_uid', user.uid); }
+    
     try {
-      const res = await fetch(`${BACKEND_URL}/api/roster/${user.uid}`);
-      const roster = await res.json();
-      
-      let matchedPatient = null;
-      for (let pt of roster) {
-          if (textString.toLowerCase().includes(pt.name.toLowerCase())) { matchedPatient = pt.name; break; }
-      }
-      setIsScanning(false);
-      
-      if (matchedPatient) {
-          const confirmAutoFile = window.confirm(`Smart Scan Results:\n\nWe detected "${matchedPatient}" from your roster in the shared text.\n\nSave this directly to their encounter notes?`);
-          if (confirmAutoFile) {
-              const dateStr = new Date().toISOString().split('T')[0];
-              await fetch(`${BACKEND_URL}/api/visit/note`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ target_patient: matchedPatient, visit_date: dateStr, note: `[Shared Text Message]:\n${textString}` }) });
-              alert(`Saved to ${matchedPatient}'s chart!`);
-              fetchPatientData(matchedPatient);
-          } else { setView('provider_roster'); }
-      } else {
-          alert(`Shared Text:\n"${textString}"\n\nNo matching patient found on your roster. Please select a patient manually.`);
-          setView('provider_roster');
-      }
-    } catch (e) { setIsScanning(false); alert("Text scan failed."); setView('provider_roster'); }
+        const res = await fetch(`${BACKEND_URL}/api/predict-patient`, { method: 'POST', body: formData });
+        const data = await res.json();
+        setIsScanning(false);
+        
+        if (data.matched_patient) {
+            const confirmAutoFile = window.confirm(`Smart Scan Results:\n\nWe detected "${data.matched_patient}" from your roster in the shared text.\n\nSave this directly to their encounter notes?`);
+            if (confirmAutoFile) {
+                const dateStr = new Date().toISOString().split('T')[0];
+                await fetch(`${BACKEND_URL}/api/visit/note`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ target_patient: data.matched_patient, visit_date: dateStr, note: `[Shared Text Message]:\n${textString}` }) });
+                alert(`Saved to ${data.matched_patient}'s chart!`);
+                fetchPatientData(data.matched_patient);
+            } else { setView('provider_roster'); }
+        } else {
+            alert(`Shared Text:\n"${textString}"\n\nNo matching patient found on your roster. Please select a patient manually.`);
+            setView('provider_roster');
+        }
+    } catch (e) {
+        setIsScanning(false); alert("Text processing failed."); setView('provider_roster');
+    }
   };
 
   // --- 🔄 PWA SHARE INTERCEPTOR ---

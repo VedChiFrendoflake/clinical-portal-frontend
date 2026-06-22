@@ -4,7 +4,7 @@ import { Activity, Upload, User, ShieldCheck, UserPlus, Search, Users, ActivityS
 
 const BACKEND_URL = "https://clinical-portal-backend-production.up.railway.app";
 
-const EncounterVoiceNote = ({ targetPatient, visitDate, providerName, noteValue, setNoteValue, patientNoteValue, setPatientNoteValue, onSave, isPatient }) => {
+const EncounterVoiceNote = ({ targetPatient, visitDate, providerName, noteValue, setNoteValue, onSave, isPatient }) => {
   const [isRecording, setIsRecording] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
   const mediaRecorderRef = useRef(null);
@@ -40,8 +40,7 @@ const EncounterVoiceNote = ({ targetPatient, visitDate, providerName, noteValue,
       const res = await fetch(`${BACKEND_URL}/api/visit/voice`, { method: "POST", body: formData });
       const data = await res.json();
       if (data.status === "success") {
-          setNoteValue(data.doctor_note);
-          setPatientNoteValue(data.patient_note);
+          setNoteValue(data.note);
       }
       else alert("AI Failed: " + data.message);
     } catch (err) { alert("Upload failed."); } finally { setIsProcessing(false); }
@@ -49,17 +48,9 @@ const EncounterVoiceNote = ({ targetPatient, visitDate, providerName, noteValue,
 
   if (isPatient) {
     return (
-      <div className="flex flex-col h-full gap-4">
-        {patientNoteValue && (
-            <div className="bg-pink-50 p-4 rounded-xl border border-pink-100 shadow-sm">
-                <p className="text-xs font-bold text-pink-700 uppercase mb-2 flex items-center gap-1"><HeartPulse size={14}/> Doctor's Note (For You)</p>
-                <div className="text-sm text-pink-900 whitespace-pre-wrap">{patientNoteValue}</div>
-            </div>
-        )}
-        <div className="flex-grow">
-            <p className="text-xs font-bold text-slate-500 uppercase mb-2">Original Clinical Note</p>
-            <textarea value={noteValue || 'No clinical notes recorded for this visit.'} readOnly className="w-full h-32 p-3 border rounded-lg bg-slate-50 text-sm focus:ring-2 focus:ring-purple-500 outline-none resize-none"></textarea>
-        </div>
+      <div className="flex flex-col h-full min-h-[200px]">
+        <p className="text-xs font-bold text-slate-500 uppercase mb-2">Original Clinical Note</p>
+        <textarea value={noteValue || 'No clinical notes recorded for this visit.'} readOnly className="w-full flex-grow p-3 border rounded-lg bg-slate-50 text-sm focus:ring-2 focus:ring-purple-500 outline-none resize-none mb-3"></textarea>
       </div>
     );
   }
@@ -72,15 +63,8 @@ const EncounterVoiceNote = ({ targetPatient, visitDate, providerName, noteValue,
           {isRecording ? <><Square size={12}/> Stop & Process</> : isProcessing ? "🤖 Processing..." : <><Mic size={12}/> Dictate Note</>}
         </button>
       </div>
-      <textarea value={noteValue} onChange={(e) => setNoteValue(e.target.value)} placeholder="Type clinical notes manually, or dictate to let AI generate both Clinical & Patient versions..." className="w-full flex-grow p-3 border rounded-lg bg-white text-sm focus:ring-2 focus:ring-purple-500 outline-none resize-none min-h-[100px]"></textarea>
+      <textarea value={noteValue} onChange={(e) => setNoteValue(e.target.value)} placeholder="Type clinical notes manually, or dictate..." className="w-full flex-grow p-3 border rounded-lg bg-white text-sm focus:ring-2 focus:ring-purple-500 outline-none resize-none min-h-[100px] mb-3"></textarea>
       
-      {patientNoteValue && (
-          <div className="bg-pink-50 p-3 rounded-lg border border-pink-100">
-              <p className="text-[10px] font-bold text-pink-700 uppercase mb-1">AI Generated Patient Note</p>
-              <textarea value={patientNoteValue} onChange={(e) => setPatientNoteValue(e.target.value)} className="w-full p-2 border rounded bg-white text-xs outline-none min-h-[60px] resize-none"></textarea>
-          </div>
-      )}
-
       <button onClick={onSave} className="w-full bg-purple-600 text-white font-bold py-2 rounded-lg hover:bg-purple-700 transition shadow-sm flex items-center justify-center gap-2"><Save size={16}/> Save Visit Note</button>
     </div>
   );
@@ -138,7 +122,6 @@ export default function App() {
   const [isEditingProfile, setIsEditingProfile] = useState(false);
   const [profileForm, setProfileForm] = useState({ genetic_conditions: '', chronic_diseases: '', allergies: '', notes: '' });
   const [visitNotes, setVisitNotes] = useState({});
-  const [visitPatientNotes, setVisitPatientNotes] = useState({});
   const [prescriptionInput, setPrescriptionInput] = useState({ medication_name: '', dosage: '', instructions: '' });
   const [orderInput, setOrderInput] = useState({ test_name: '', reason: '' });
 
@@ -201,9 +184,9 @@ export default function App() {
   useEffect(() => {
     if (patientData.profile) setProfileForm(patientData.profile);
     if (patientData.visits) {
-      const initialDNotes = {}; const initialPNotes = {};
-      Object.values(patientData.visits).forEach(v => { initialDNotes[v.date] = v.doctor_note || ''; initialPNotes[v.date] = v.patient_note || ''; });
-      setVisitNotes(initialDNotes); setVisitPatientNotes(initialPNotes);
+      const initialDNotes = {}; 
+      Object.values(patientData.visits).forEach(v => { initialDNotes[v.date] = v.doctor_note || ''; });
+      setVisitNotes(initialDNotes); 
     }
   }, [patientData]);
 
@@ -347,7 +330,7 @@ export default function App() {
 
   const handleSaveVisitNote = async (date) => {
     try { 
-        const res = await fetch(`${BACKEND_URL}/api/visit/note`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ target_patient: activePatient, visit_date: date, note: visitNotes[date], patient_note: visitPatientNotes[date], provider_name: user?.real_name || "Unknown Provider" }) }); 
+        const res = await fetch(`${BACKEND_URL}/api/visit/note`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ target_patient: activePatient, visit_date: date, note: visitNotes[date], provider_name: user?.real_name || "Unknown Provider" }) }); 
         const data = await res.json(); alert(data.message); fetchPatientData(activePatient); 
     } catch (err) { alert("Failed to save note."); }
   };
@@ -581,10 +564,19 @@ export default function App() {
                                       <div className="flex justify-between border-b pb-4 mb-4"><h4 className="font-bold text-lg">Encounter: {visit.date}</h4><p className="text-sm text-slate-500">{visit.provider}</p></div>
                                       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                                           <div className="space-y-4">
-                                              <div className="bg-emerald-50 p-4 rounded-xl border border-emerald-100">
-                                                <p className="text-xs font-bold text-emerald-700 uppercase mb-1">AI Visit Summary</p>
+                                              
+                                              <div className="bg-emerald-50 p-4 rounded-xl border border-emerald-100 shadow-sm">
+                                                <p className="text-xs font-bold text-emerald-700 uppercase mb-1">AI Clinical Summary</p>
                                                 <div className="text-sm text-emerald-900 whitespace-pre-wrap">{renderFormattedText(visit.ai_summary)}</div>
                                               </div>
+
+                                              {visit.patient_note && (
+                                                  <div className="bg-pink-50 p-4 rounded-xl border border-pink-100 shadow-sm">
+                                                      <p className="text-xs font-bold text-pink-700 uppercase mb-1 flex items-center gap-1"><HeartPulse size={14}/> Patient Explanation</p>
+                                                      <div className="text-sm text-pink-900 whitespace-pre-wrap">{renderFormattedText(visit.patient_note)}</div>
+                                                  </div>
+                                              )}
+                                              
                                               {visit.ai_terminology && Object.keys(visit.ai_terminology).length > 0 && (
                                                 <div className="bg-blue-50 p-4 rounded-xl border border-blue-100">
                                                   <p className="text-xs font-bold text-blue-700 uppercase mb-2 flex items-center gap-1"><BookOpen size={14}/> Terminology Guide</p>
@@ -595,6 +587,8 @@ export default function App() {
                                                   </ul>
                                                 </div>
                                               )}
+                                              
+                                              <div><p className="text-xs font-bold text-slate-500 uppercase mb-2">Attached Documents</p><ul className="space-y-2">{visit.documents.map((doc, i) => (<li key={i} className="flex items-center gap-2 text-sm text-slate-700 bg-slate-50 p-2 rounded border break-all"><FileText size={14} className="text-slate-400 shrink-0"/> {doc}</li>))}</ul></div>
                                           </div>
                                           
                                           {/* 🎙️ Voice Note Component */}
@@ -602,15 +596,13 @@ export default function App() {
                                             targetPatient={activePatient} visitDate={visit.date} providerName={user.real_name}
                                             noteValue={visitNotes[visit.date] || ''}
                                             setNoteValue={(val) => setVisitNotes({...visitNotes, [visit.date]: val})}
-                                            patientNoteValue={visitPatientNotes[visit.date] || ''}
-                                            setPatientNoteValue={(val) => setVisitPatientNotes({...visitPatientNotes, [visit.date]: val})}
                                             onSave={() => handleSaveVisitNote(visit.date)}
                                             isPatient={user.role === 'Patient'}
                                           />
                                       </div>
                                   </div>
                               ))
-                          ) : (<div className="bg-white p-12 text-center rounded-2xl border"><p className="text-slate-500">No encounters.</p></div>)}
+                          ) : (<div className="bg-white p-12 text-center rounded-2xl border border-slate-100 border-dashed"><p className="text-slate-500">No recorded encounters.</p></div>)}
                       </div>
                   )}
 

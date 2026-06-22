@@ -4,6 +4,14 @@ import { Activity, Upload, User, ShieldCheck, UserPlus, Search, Users, ActivityS
 
 const BACKEND_URL = "https://clinical-portal-backend-production.up.railway.app";
 
+// --- 🫀 SUB-COMPONENT: LEFT-TO-RIGHT ECG LOADER ---
+const EcgLoader = ({ size = 48, className = "" }) => (
+  <div className={`relative inline-block ${className}`} style={{ width: size, height: size }}>
+    <Activity size={size} className="text-slate-200 absolute inset-0" />
+    <Activity size={size} className="text-blue-600 absolute inset-0 animate-ecg" />
+  </div>
+);
+
 // --- 🎙️ SUB-COMPONENT: AI VOICE DICTATION FOR PROVIDERS ---
 const EncounterVoiceNote = ({ targetPatient, visitDate, providerName, noteValue, setNoteValue, patientNoteValue, setPatientNoteValue, onSave, isPatient }) => {
   const [isRecording, setIsRecording] = useState(false);
@@ -73,7 +81,7 @@ const EncounterVoiceNote = ({ targetPatient, visitDate, providerName, noteValue,
           {isRecording ? <><Square size={12}/> Stop & Process</> : isProcessing ? "🤖 Processing..." : <><Mic size={12}/> Dictate Note</>}
         </button>
       </div>
-      <textarea value={noteValue} onChange={(e) => setNoteValue(e.target.value)} placeholder="Type clinical notes manually, or dictate to let AI generate both Clinical & Patient versions..." className="w-full flex-grow p-3 border rounded-lg bg-white text-sm focus:ring-2 focus:ring-purple-500 outline-none resize-none min-h-[100px]"></textarea>
+      <textarea value={noteValue} onChange={(e) => setNoteValue(e.target.value)} placeholder="Type clinical notes manually, or dictate to let AI generate both Clinical & Patient versions..." className="w-full flex-grow p-3 border rounded-lg bg-white text-sm focus:ring-2 focus:ring-purple-500 outline-none resize-none min-h-[100px] mb-3"></textarea>
       
       {patientNoteValue && (
           <div className="bg-pink-50 p-3 rounded-lg border border-pink-100">
@@ -372,7 +380,15 @@ export default function App() {
 
   return (
     <div className={`min-h-screen bg-slate-50 text-slate-800 font-sans ${textSize === 'large' ? 'text-lg' : 'text-base'}`}>
-      <style>{`@keyframes dropIn { 0% { transform: translateY(-100vh) scaleY(1.5); opacity: 0; } 60% { opacity: 1; } 100% { transform: translateY(0) scale(1); opacity: 1; } } @keyframes splashOut { 0% { transform: scale(0); opacity: 0.8; } 100% { transform: scale(25); opacity: 0; display: none; } } .liquid-drop { animation: dropIn 0.6s cubic-bezier(0.25, 1, 0.5, 1) forwards; } .liquid-ripple-1 { animation: splashOut 1.2s cubic-bezier(0.1, 0.8, 0.3, 1) forwards; animation-delay: 0.5s; } .liquid-ripple-2 { animation: splashOut 1.2s cubic-bezier(0.1, 0.8, 0.3, 1) forwards; animation-delay: 0.65s; }`}</style>
+      <style>{`
+        @keyframes dropIn { 0% { transform: translateY(-100vh) scaleY(1.5); opacity: 0; } 60% { opacity: 1; } 100% { transform: translateY(0) scale(1); opacity: 1; } } 
+        @keyframes splashOut { 0% { transform: scale(0); opacity: 0.8; } 100% { transform: scale(25); opacity: 0; display: none; } } 
+        .liquid-drop { animation: dropIn 0.6s cubic-bezier(0.25, 1, 0.5, 1) forwards; } 
+        .liquid-ripple-1 { animation: splashOut 1.2s cubic-bezier(0.1, 0.8, 0.3, 1) forwards; animation-delay: 0.5s; } 
+        .liquid-ripple-2 { animation: splashOut 1.2s cubic-bezier(0.1, 0.8, 0.3, 1) forwards; animation-delay: 0.65s; }
+        @keyframes ecgWipe { 0% { clip-path: inset(0 100% 0 0); } 50% { clip-path: inset(0 0 0 0); } 100% { clip-path: inset(0 0 0 100%); } }
+        .animate-ecg { animation: ecgWipe 1.5s cubic-bezier(0.4, 0, 0.2, 1) infinite; }
+      `}</style>
       
       {splashState !== 'hidden' && (
         <div className={`fixed inset-0 z-[99999] flex items-center justify-center bg-blue-50 transition-opacity duration-700 ${splashState === 'fading' ? 'opacity-0 pointer-events-none' : 'opacity-100'}`}>
@@ -381,7 +397,10 @@ export default function App() {
       )}
 
       {view === 'loading_session' ? (
-        <div className="flex flex-col justify-center items-center min-h-screen bg-slate-50"><Activity className="text-blue-600 animate-spin mb-4" size={32} /></div>
+        <div className="flex flex-col justify-center items-center min-h-screen bg-slate-50">
+          <EcgLoader size={48} className="mb-4" />
+          <p className="text-sm font-semibold text-slate-500 tracking-wide">Restoring Session...</p>
+        </div>
       ) : !user ? (
         <div className="flex flex-col justify-center items-center py-12 px-4 min-h-screen bg-gradient-to-br from-blue-50 to-cyan-100">
           <div className="bg-white p-8 md:p-10 rounded-2xl shadow-xl w-full max-w-lg border border-slate-100 animate-in fade-in slide-in-from-bottom-8 duration-700">
@@ -579,39 +598,37 @@ export default function App() {
                   )}
 
                   {dashTab === 'visits' && (
-                      <div className="space-y-6 animate-in fade-in duration-300">
-                          <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100"><h3 className="text-xl font-bold mb-2 text-slate-800 flex items-center gap-2"><Stethoscope className="text-purple-600"/> Clinical Encounters</h3></div>
+                      <div className="space-y-6">
+                          <div className="bg-white p-6 rounded-2xl border"><h3 className="text-xl font-bold mb-2 flex items-center gap-2"><Stethoscope className="text-purple-600"/> Clinical Encounters</h3></div>
                           {patientData.visits && Object.keys(patientData.visits).length > 0 ? (
                               Object.values(patientData.visits).sort((a,b) => new Date(b.date) - new Date(a.date)).map((visit, idx) => (
-                                  <div key={idx} className="bg-white p-4 md:p-6 rounded-2xl shadow-sm border border-slate-100 hover:shadow-md transition-shadow">
-                                      <div className="flex justify-between items-center border-b pb-4 mb-4"><div><h4 className="font-bold text-lg text-slate-800">Encounter: {visit.date}</h4><p className="text-sm text-slate-500">Provider: {visit.provider}</p></div></div>
+                                  <div key={idx} className="bg-white p-6 rounded-2xl border hover:shadow-md transition-shadow">
+                                      <div className="flex justify-between border-b pb-4 mb-4"><h4 className="font-bold text-lg">Encounter: {visit.date}</h4><p className="text-sm text-slate-500">{visit.provider}</p></div>
                                       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                                           <div className="space-y-4">
                                               
                                               <div className="bg-emerald-50 p-4 rounded-xl border border-emerald-100 shadow-sm">
                                                 <p className="text-xs font-bold text-emerald-700 uppercase mb-1">AI Visit Summary</p>
-                                                <div className="text-sm text-emerald-900 whitespace-pre-wrap">{renderFormattedText(visit.ai_summary || "No specific metrics detected.")}</div>
+                                                <div className="text-sm text-emerald-900 whitespace-pre-wrap">{renderFormattedText(visit.ai_summary)}</div>
                                               </div>
 
                                               {visit.ai_terminology && Object.keys(visit.ai_terminology).length > 0 && (
-                                                <div className="bg-blue-50 p-4 rounded-xl border border-blue-100">
+                                                <div className="bg-blue-50 p-4 rounded-xl border border-blue-100 shadow-sm">
                                                   <p className="text-xs font-bold text-blue-700 uppercase mb-2 flex items-center gap-1"><BookOpen size={14}/> Terminology Guide</p>
                                                   <ul className="space-y-2">
                                                     {Object.entries(visit.ai_terminology).map(([term, definition], i) => (
-                                                      <li key={i} className="text-sm text-blue-900 bg-white p-2 rounded shadow-sm border border-blue-50"><strong>{term}:</strong> {definition}</li>
+                                                      <li key={i} className="text-sm text-blue-900 bg-white p-2 rounded border border-blue-50"><strong>{term}:</strong> {definition}</li>
                                                     ))}
                                                   </ul>
                                                 </div>
                                               )}
-
+                                              
                                               <div><p className="text-xs font-bold text-slate-500 uppercase mb-2">Attached Documents</p><ul className="space-y-2">{visit.documents.map((doc, i) => (<li key={i} className="flex items-center gap-2 text-sm text-slate-700 bg-slate-50 p-2 rounded border break-all"><FileText size={14} className="text-slate-400 shrink-0"/> {doc}</li>))}</ul></div>
                                           </div>
                                           
                                           {/* 🎙️ Voice Note Component */}
                                           <EncounterVoiceNote 
-                                            targetPatient={activePatient}
-                                            visitDate={visit.date}
-                                            providerName={user.real_name}
+                                            targetPatient={activePatient} visitDate={visit.date} providerName={user.real_name}
                                             noteValue={visitNotes[visit.date] || ''}
                                             setNoteValue={(val) => setVisitNotes({...visitNotes, [visit.date]: val})}
                                             patientNoteValue={visitPatientNotes[visit.date] || ''}
@@ -619,7 +636,6 @@ export default function App() {
                                             onSave={() => handleSaveVisitNote(visit.date)}
                                             isPatient={user.role === 'Patient'}
                                           />
-                                          
                                       </div>
                                   </div>
                               ))
@@ -698,13 +714,12 @@ export default function App() {
                          <>
                            <div className="flex gap-2 border-b border-slate-200 pb-2 relative z-10 overflow-x-auto">
                                {Object.keys(patientData.categories || {}).map(category => (
-                                   <button key={category} type="button" onClick={(e) => { e.preventDefault(); handleCategoryClick(category); }} className={`cursor-pointer px-4 md:px-6 py-2 rounded-t-lg font-bold whitespace-nowrap ${activeCategory === category ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}>{category}</button>
+                                   <button key={category} type="button" onClick={(e) => { e.preventDefault(); handleCategoryClick(category); }} className={`px-4 py-2 rounded-t-lg font-bold ${activeCategory === category ? 'bg-blue-600 text-white' : 'bg-slate-100'}`}>{category}</button>
                                ))}
                            </div>
                            {patientData.categories[activeCategory]?.length > 0 && (
-                               <div className="bg-white p-4 rounded-xl border border-slate-200 flex flex-col sm:flex-row sm:items-center gap-4 mt-4">
-                                   <div className="flex items-center gap-2"><ActivitySquare className="text-blue-600" size={24} /><label className="font-bold text-slate-700">Select Lab Test:</label></div>
-                                   <select value={selectedTestName} onChange={(e) => setSelectedTestName(e.target.value)} className="p-3 border rounded-lg bg-slate-50 font-semibold w-full sm:w-auto focus:ring-2">
+                               <div className="bg-white p-4 rounded-xl border flex gap-4 mt-4">
+                                   <select value={selectedTestName} onChange={(e) => setSelectedTestName(e.target.value)} className="p-3 border rounded-lg w-full">
                                        {patientData.categories[activeCategory].map(test => (<option key={test.test_name} value={test.test_name}>{test.test_name}</option>))}
                                    </select>
                                </div>
@@ -714,28 +729,28 @@ export default function App() {
                                if (!activeTest) return null;
                                const sortedHistory = [...activeTest.history].sort((a, b) => new Date(a.Date) - new Date(b.Date));
                                return (
-                                   <div className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden mt-6 flex flex-col">
-                                       <div className="bg-slate-50 px-4 md:px-6 py-4 border-b flex justify-between sm:items-center"><h3 className="font-bold text-slate-800 text-lg">{activeTest.test_name} Trend Analysis</h3><span className="text-sm bg-white border px-4 py-1.5 rounded-full font-medium">Range: {activeTest.normal_min} - {activeTest.normal_max} {activeTest.unit}</span></div>
+                                   <div className="bg-white rounded-2xl border mt-6 flex flex-col">
+                                       <div className="bg-slate-50 px-6 py-4 border-b flex justify-between"><h3 className="font-bold text-lg">{activeTest.test_name}</h3><span className="text-sm bg-white border px-4 py-1.5 rounded-full">Range: {activeTest.normal_min} - {activeTest.normal_max} {activeTest.unit}</span></div>
                                        <div className="grid grid-cols-1 lg:grid-cols-2">
-                                           <div className="p-2 sm:p-6 border-b lg:border-b-0 lg:border-r h-[300px] lg:h-80">
+                                           <div className="p-6 border-b lg:border-r h-80">
                                                <ResponsiveContainer width="100%" height="100%">
-                                                 <LineChart data={sortedHistory} margin={{ top: 10, right: 30, left: 0, bottom: 0 }}>
+                                                 <LineChart data={sortedHistory}>
                                                    <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                                                   <XAxis dataKey="Date" tick={{fontSize: 12}} axisLine={false} tickLine={false} />
-                                                   <YAxis domain={[0, 'auto']} tick={{fontSize: 12}} axisLine={false} tickLine={false} />
-                                                   <Tooltip contentStyle={{borderRadius: '8px'}} />
+                                                   <XAxis dataKey="Date" tick={{fontSize: 12}} />
+                                                   <YAxis domain={[0, 'auto']} tick={{fontSize: 12}} />
+                                                   <Tooltip />
                                                    {activeTest.normal_min !== 0 && <ReferenceLine y={activeTest.normal_min} stroke="#10B981" strokeDasharray="3 3" />}
                                                    {activeTest.normal_max !== 0 && <ReferenceLine y={activeTest.normal_max} stroke="#10B981" strokeDasharray="3 3" />}
                                                    <Line type="monotone" dataKey="Value" stroke="#2563EB" strokeWidth={4} />
                                                  </LineChart>
                                                </ResponsiveContainer>
                                            </div>
-                                           <div className="p-4 sm:p-6 overflow-x-auto lg:overflow-y-auto h-auto lg:h-80">
-                                               <table className="w-full text-left min-w-[300px]">
+                                           <div className="p-6 overflow-auto h-80">
+                                               <table className="w-full text-left">
                                                    <thead><tr><th className="pb-3 text-xs uppercase text-slate-400 border-b">Date</th><th className="pb-3 text-xs uppercase text-slate-400 border-b">Value</th><th className="pb-3 text-xs uppercase text-slate-400 border-b">Status</th></tr></thead>
                                                    <tbody>
                                                        {sortedHistory.map((record, i) => (
-                                                           <tr key={i} className="hover:bg-slate-50"><td className="py-3 text-sm font-medium border-b">{record.Date}</td><td className="py-3 text-sm font-bold border-b">{record.Value} {activeTest.unit}</td><td className="py-3 border-b"><span className={`text-xs px-2 py-1 rounded-full font-bold shadow-sm ${record.Status === 'Normal' ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-700'}`}>{record.Status}</span></td></tr>
+                                                           <tr key={i}><td className="py-3 text-sm font-medium border-b">{record.Date}</td><td className="py-3 text-sm font-bold border-b">{record.Value} {activeTest.unit}</td><td className="py-3 border-b"><span className={`text-xs px-2 py-1 rounded-full font-bold ${record.Status === 'Normal' ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-700'}`}>{record.Status}</span></td></tr>
                                                        ))}
                                                    </tbody>
                                                </table>
@@ -745,7 +760,7 @@ export default function App() {
                                );
                            })()}
                          </>
-                       ) : (<div className="bg-white p-12 text-center rounded-2xl border"><p className="text-slate-500">No lab data available.</p></div>)}
+                       ) : (<div className="bg-white p-12 text-center rounded-2xl border"><p className="text-slate-500">No lab data.</p></div>)}
                      </div>
                   )}
 
@@ -926,7 +941,7 @@ export default function App() {
       {isSaving && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[99999] flex flex-col justify-center items-center text-white px-4 animate-in fade-in duration-300">
           <div className="bg-white p-8 rounded-2xl shadow-2xl flex flex-col items-center max-w-sm w-full text-center border border-slate-100">
-            <Activity className="text-blue-600 animate-spin mb-4" size={48} />
+            <EcgLoader size={48} className="mb-4" />
             <h3 className="text-slate-900 font-bold text-lg mb-1">Processing Document</h3>
             <p className="text-slate-500 text-sm">AI is actively extracting and mapping lab values...</p>
           </div>
@@ -936,7 +951,7 @@ export default function App() {
       {isScanning && !isSaving && (
         <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-[99999] flex flex-col justify-center items-center text-white px-4 animate-in fade-in duration-300">
           <div className="bg-white p-8 rounded-2xl shadow-2xl flex flex-col items-center max-w-sm w-full text-center border border-slate-100">
-            <Activity className="text-blue-600 animate-pulse mb-4 animate-spin" size={48} />
+            <EcgLoader size={48} className="mb-4" />
             <h3 className="text-slate-900 font-bold text-lg mb-1">AI Smart Scanning Active</h3>
             <p className="text-slate-500 text-sm">Cross-referencing shared data...</p>
           </div>

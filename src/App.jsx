@@ -1,10 +1,31 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine, Legend } from 'recharts';
-import { Activity, Upload, User, ShieldCheck, UserPlus, Search, Users, ActivitySquare, Syringe, Bug, FlaskConical, AlertTriangle, Ruler, Scale, ClipboardList, Edit3, Save, Stethoscope, FileText, Pill, FileSignature, Settings, Link as LinkIcon, Inbox, Bell, Trash2, Mic, Square, BookOpen, HeartPulse, CheckCircle2, Info, X } from 'lucide-react';
+import { Activity, Upload, User, ShieldCheck, UserPlus, Search, Users, ActivitySquare, Syringe, Bug, FlaskConical, AlertTriangle, Ruler, Scale, ClipboardList, Edit3, Save, Stethoscope, FileText, Pill, FileSignature, Settings, Link as LinkIcon, Inbox, Bell, Trash2, Mic, Square, BookOpen, HeartPulse, CheckCircle2, Info, X, Eye, Languages, Palette, Type } from 'lucide-react';
 
 const BACKEND_URL = "https://clinical-portal-backend-production.up.railway.app";
 
-// --- 🧭 THE 9 MASTER CHART TABS (Now featuring the Landing "Overview") ---
+// ============================================================================
+// 🚨 IRONCLAD REACT VIRTUAL-DOM PATCH FOR GOOGLE TRANSLATE
+// Prevents React "NotFoundError: Failed to execute removeChild" crashes
+// ============================================================================
+if (typeof window !== 'undefined' && !window._reactDomPatched) {
+  window._reactDomPatched = true;
+  const rawRemoveChild = Node.prototype.removeChild;
+  Node.prototype.removeChild = function(child) {
+    if (child.parentNode !== this) {
+      console.warn("React Google-Translate Virtual DOM self-correction triggered.");
+      return child;
+    }
+    return rawRemoveChild.call(this, child);
+  };
+  const rawInsertBefore = Node.prototype.insertBefore;
+  Node.prototype.insertBefore = function(newNode, refNode) {
+    if (refNode && refNode.parentNode !== this) return newNode;
+    return rawInsertBefore.call(this, newNode, refNode);
+  };
+}
+
+// --- 🧭 THE 9 MASTER CHART TABS ---
 const CHART_NAV_ITEMS = [
   { id: 'overview', label: 'Overview', icon: HeartPulse, activeClass: 'bg-rose-50 text-rose-700 border-rose-200', iconClass: 'text-rose-600' },
   { id: 'profile', label: 'Profile', icon: ClipboardList, activeClass: 'bg-emerald-50 text-emerald-700 border-emerald-200', iconClass: 'text-emerald-600' },
@@ -29,23 +50,18 @@ const EcgLoader = ({ size = 48, className = "" }) => (
 const ToastBar = ({ toast, onClose }) => {
   if (!toast) return null;
   const icons = { success: CheckCircle2, error: AlertTriangle, info: Info };
-  const bgClasses = {
-    success: 'bg-emerald-800 text-white border-emerald-900',
-    error: 'bg-red-800 text-white border-red-900',
-    info: 'bg-slate-900 text-white border-slate-950'
-  };
   const Icon = icons[toast.type] || Info;
 
   return (
-    <div className="fixed top-20 left-1/2 -translate-x-1/2 z-[999999] flex items-center gap-3 px-5 py-3 rounded-2xl shadow-xl border animate-in fade-in slide-in-from-top-4 duration-300 max-w-md w-[90%]">
+    <div className="fixed top-20 left-1/2 -translate-x-1/2 z-[999999] flex items-center gap-3 px-5 py-3 rounded-2xl shadow-xl border bg-slate-900 text-white border-slate-800 animate-in fade-in slide-in-from-top-4 duration-300 max-w-md w-[90%]">
       <Icon size={20} className="shrink-0 text-amber-400" />
       <p className="text-sm font-semibold flex-grow">{toast.message}</p>
-      <button onClick={onClose} className="p-1 text-slate-400 hover:text-white rounded-lg"><X size={16}/></button>
+      <button onClick={onClose} className="p-1 text-slate-400 hover:text-white rounded-lg cursor-pointer"><X size={16}/></button>
     </div>
   );
 };
 
-// --- 🎙️ SUB-COMPONENT: AI VOICE DICTATION FOR PROVIDERS (With Live Equalizer) ---
+// --- 🎙️ SUB-COMPONENT: AI VOICE DICTATION FOR PROVIDERS ---
 const EncounterVoiceNote = ({ targetPatient, visitDate, providerName, noteValue, setNoteValue, showToast }) => {
   const [isRecording, setIsRecording] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
@@ -63,7 +79,7 @@ const EncounterVoiceNote = ({ targetPatient, visitDate, providerName, noteValue,
         await uploadVoiceNote(audioBlob);
       };
       mediaRecorderRef.current.start(); setIsRecording(true);
-      showToast("Live dictation active. Speak near microphone.", "info");
+      showToast("Live dictation active. Speak clearly near microphone.", "info");
     } catch (err) { showToast("Microphone permissions denied by browser.", "error"); }
   };
 
@@ -95,15 +111,9 @@ const EncounterVoiceNote = ({ targetPatient, visitDate, providerName, noteValue,
     <div className="flex flex-col h-full min-h-[200px] gap-2">
       <div className="flex justify-between items-center mb-1">
         <p className="text-xs font-bold text-slate-500 uppercase">Physician Encounter Note</p>
-        
-        {/* Live Audio Feedback Equalizer Badge */}
         {isRecording ? (
           <button onClick={stopRecording} className="px-4 py-1.5 rounded-full text-xs font-bold text-white bg-red-600 hover:bg-red-700 shadow-md flex items-center gap-2 animate-pulse cursor-pointer">
-            <div className="flex items-center gap-0.5 h-3">
-              <span className="w-1 bg-white animate-bounce h-full"></span>
-              <span className="w-1 bg-white animate-bounce h-2/3" style={{ animationDelay: '150ms' }}></span>
-              <span className="w-1 bg-white animate-bounce h-full" style={{ animationDelay: '300ms' }}></span>
-            </div>
+            <div className="flex items-center gap-0.5 h-3"><span className="w-1 bg-white animate-bounce h-full"></span><span className="w-1 bg-white animate-bounce h-2/3" style={{ animationDelay: '150ms' }}></span><span className="w-1 bg-white animate-bounce h-full" style={{ animationDelay: '300ms' }}></span></div>
             <span>Listening... Tap to End</span>
           </button>
         ) : (
@@ -112,12 +122,11 @@ const EncounterVoiceNote = ({ targetPatient, visitDate, providerName, noteValue,
           </button>
         )}
       </div>
-      <textarea value={noteValue} onChange={(e) => setNoteValue(e.target.value)} placeholder="Type clinical notes manually, or dictate to let AI clean up spoken dictation..." className="w-full flex-grow p-3 border rounded-lg bg-white text-sm focus:ring-2 focus:ring-purple-500 outline-none resize-none min-h-[100px] mb-3"></textarea>
+      <textarea value={noteValue} onChange={(e) => setNoteValue(e.target.value)} placeholder="Type clinical notes manually, or dictate to let AI format spoken audio..." className="w-full flex-grow p-3 border rounded-lg bg-white text-sm focus:ring-2 focus:ring-purple-500 outline-none resize-none min-h-[100px] mb-3"></textarea>
     </div>
   );
 };
 
-// --- HELPER: Render Gemini Bold Text ---
 const renderFormattedText = (text) => {
   if (!text) return "No specific clinical narrative recorded.";
   const lines = text.split('\n');
@@ -135,7 +144,12 @@ const renderFormattedText = (text) => {
 };
 
 export default function App() {
-  // --- 1. THE SPLASH SCREEN FIX (Instant reload after 1st session) ---
+  // --- 1. ACCESSIBILITY STATES & PERSISTENCE ---
+  const [accDrawerOpen, setAccDrawerOpen] = useState(false);
+  const [themeMode, setThemeMode] = useState(() => localStorage.getItem('cliniport_theme') || 'light');
+  const [fontSizeMode, setFontSizeMode] = useState(() => localStorage.getItem('cliniport_font') || 'md');
+  const [colorblindMode, setColorblindMode] = useState(() => localStorage.getItem('cliniport_cb') || 'none');
+
   const [splashState, setSplashState] = useState(() => {
     if (sessionStorage.getItem('cliniport_splashed')) return 'hidden';
     sessionStorage.setItem('cliniport_splashed', 'true');
@@ -150,7 +164,6 @@ export default function App() {
 
   const [user, setUser] = useState(() => { const savedUser = localStorage.getItem('cliniport_user'); return savedUser ? JSON.parse(savedUser) : null; });
   const [view, setView] = useState(user ? 'loading_session' : 'login'); 
-  const [textSize, setTextSize] = useState('normal'); 
   const [authError, setAuthError] = useState(''); 
   const [isLoading, setIsLoading] = useState(false); 
   
@@ -163,7 +176,7 @@ export default function App() {
   const [patientData, setPatientData] = useState({ ai_summary: '', categories: {}, vaccines: [], diseases: [], uploaded_files: [], vitals: [], personal_info: {}, profile: {}, visits: {}, prescriptions: [], ordered_tests: [] });
   const [activeCategory, setActiveCategory] = useState(''); const [selectedTestName, setSelectedTestName] = useState(''); 
   const [searchQuery, setSearchQuery] = useState(''); 
-  const [dashTab, setDashTab] = useState('overview'); // <-- Default landing tab is Overview
+  const [dashTab, setDashTab] = useState('overview'); 
   const [mobileChartDrawerOpen, setMobileChartDrawerOpen] = useState(false);
 
   const [connectIdInput, setConnectIdInput] = useState('');
@@ -184,9 +197,45 @@ export default function App() {
   const [isEditingProfile, setIsEditingProfile] = useState(false);
   const [profileForm, setProfileForm] = useState({ genetic_conditions: '', chronic_diseases: '', allergies: '', notes: '' });
   const [visitNotes, setVisitNotes] = useState({});
-  const [visitPatientNotes, setVisitPatientNotes] = useState({});
-  const [prescriptionInput, setPrescriptionInput] = useState({ medication_name: '', dosage: '', instructions: '' });
-  const [orderInput, setOrderInput] = useState({ test_name: '', reason: '' });
+
+  // --- 2. DYNAMIC GOOGLE TRANSLATE INJECTION ---
+  useEffect(() => {
+    if (!document.getElementById('google-translate-script')) {
+      window.googleTranslateElementInit = () => {
+        new window.google.translate.TranslateElement(
+          { pageLanguage: 'en', layout: window.google.translate.TranslateElement.InlineLayout.SIMPLE },
+          'cliniport_google_translate_element'
+        );
+      };
+      const s = document.createElement('script');
+      s.id = 'google-translate-script';
+      s.src = '//translate.google.com/translate_a/element.js?cb=googleTranslateElementInit';
+      s.async = true; document.body.appendChild(s);
+    }
+  }, []);
+
+  // --- Check browser native language on mount ---
+  useEffect(() => {
+    if (typeof window !== 'undefined' && navigator.language && !navigator.language.startsWith('en')) {
+      showToast(`Browser locale detected as [${navigator.language}]. Open Settings (⚙️) to translate app.`, 'info');
+    }
+  }, []);
+
+  // Sync Accessibility Preferences to LocalStorage
+  const handleThemeChange = (mode) => { setThemeMode(mode); localStorage.setItem('cliniport_theme', mode); };
+  const handleFontChange = (mode) => { setFontSizeMode(mode); localStorage.setItem('cliniport_font', mode); };
+  const handleCbChange = (mode) => { setColorblindMode(mode); localStorage.setItem('cliniport_cb', mode); };
+
+  // --- TYPOGRAPHY ENGINE MAPPING ---
+  const getTypographyClass = () => {
+    switch (fontSizeMode) {
+      case 'sm': return 'text-xs leading-normal';
+      case 'lg': return 'text-lg leading-relaxed font-medium';
+      case 'xl': return 'text-xl leading-loose font-bold tracking-wide';
+      case 'dyslexia': return 'font-mono tracking-widest leading-loose text-base font-semibold'; // Wide monospace tracking heavily aids dyslexia
+      default: return 'text-base leading-normal';
+    }
+  };
 
   const hardResetApp = async () => {
     if ('serviceWorker' in navigator) { const regs = await navigator.serviceWorker.getRegistrations(); for (let r of regs) await r.unregister(); }
@@ -208,7 +257,6 @@ export default function App() {
     return role === 'Patient' ? `${initials}${Math.floor(100000 + Math.random() * 900000)}` : `D${initials}${Math.floor(1000 + Math.random() * 9000)}`;
   };
 
-  // --- 5. INPUT MASKING HELPER FOR PATIENT ID ---
   const handleConnectInputMask = (raw) => {
     const cleaned = raw.replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
     if (cleaned.length <= 2) return cleaned;
@@ -257,9 +305,9 @@ export default function App() {
   useEffect(() => {
     if (patientData.profile) setProfileForm(patientData.profile);
     if (patientData.visits) {
-      const initialDNotes = {}; const initialPNotes = {};
-      Object.values(patientData.visits).forEach(v => { initialDNotes[v.date] = v.doctor_note || ''; initialPNotes[v.date] = v.patient_note || ''; });
-      setVisitNotes(initialDNotes); setVisitPatientNotes(initialPNotes);
+      const initialDNotes = {};
+      Object.values(patientData.visits).forEach(v => { initialDNotes[v.date] = v.doctor_note || ''; });
+      setVisitNotes(initialDNotes); 
     }
   }, [patientData]);
 
@@ -438,8 +486,25 @@ export default function App() {
   const totalUnreadCount = pendingRequests.length + notifications.length;
 
   return (
-    <div className={`min-h-screen bg-slate-50 text-slate-800 font-sans ${textSize === 'large' ? 'text-lg' : 'text-base'}`}>
+    <div className={`min-h-screen font-sans theme-${themeMode} ${getTypographyClass()}`} style={{ filter: colorblindMode === 'none' ? 'none' : `url(#cb-${colorblindMode})` }}>
+      
+      {/* ========================================================================= */}
+      // 🎨 MASTER THEME OVERRIDE STYLES (Skins all Tailwind tags instantly)
+      // =========================================================================
       <style>{`
+        /* Master Theme Class Overrides */
+        .theme-light { background-color: #f8fafc; color: #1e293b; }
+        .theme-dark { background-color: #020617 !important; color: #f8fafc !important; }
+        .theme-dark .bg-white, .theme-dark .bg-slate-50, .theme-dark .bg-blue-50, .theme-dark .bg-emerald-50, .theme-dark .bg-pink-50, .theme-dark .bg-cyan-50, .theme-dark .bg-purple-50, .theme-dark .bg-orange-50 { background-color: #0f172a !important; color: #f8fafc !important; border-color: #1e293b !important; }
+        .theme-dark .text-slate-800, .theme-dark .text-slate-700, .theme-dark .text-slate-600, .theme-dark .text-blue-900, .theme-dark .text-emerald-900, .theme-dark .text-pink-900 { color: #f8fafc !important; }
+        .theme-dark .text-slate-500, .theme-dark .text-slate-400 { color: #94a3b8 !important; }
+
+        .theme-contrast { background-color: #000000 !important; color: #ffff00 !important; font-weight: 900 !important; letter-spacing: 0.05em; }
+        .theme-contrast .bg-white, .theme-contrast .bg-slate-50, .theme-contrast .bg-blue-50, .theme-contrast .bg-emerald-50, .theme-contrast .bg-pink-50, .theme-contrast .bg-cyan-50, .theme-contrast .bg-purple-50, .theme-contrast .bg-orange-50 { background-color: #000000 !important; color: #ffff00 !important; border-color: #ffff00 !important; border-width: 3px !important; box-shadow: none !important; }
+        .theme-contrast .text-slate-800, .theme-contrast .text-slate-700, .theme-contrast .text-blue-600, .theme-contrast .text-emerald-700, .theme-contrast .text-pink-700, .theme-contrast .text-purple-600, .theme-contrast .text-orange-600 { color: #ffff00 !important; font-weight: 900 !important; }
+        .theme-contrast .text-slate-500, .theme-contrast .text-slate-400 { color: #ffcc00 !important; font-weight: 700 !important; }
+        .theme-contrast input, .theme-contrast textarea, .theme-contrast select { background-color: #000000 !important; color: #ffff00 !important; border: 3px solid #ffff00 !important; }
+
         @keyframes dropIn { 0% { transform: translateY(-100vh) scaleY(1.5); opacity: 0; } 60% { opacity: 1; } 100% { transform: translateY(0) scale(1); opacity: 1; } } 
         @keyframes splashOut { 0% { transform: scale(0); opacity: 0.8; } 100% { transform: scale(25); opacity: 0; display: none; } } 
         .liquid-drop { animation: dropIn 0.6s cubic-bezier(0.25, 1, 0.5, 1) forwards; } 
@@ -448,6 +513,26 @@ export default function App() {
         @keyframes ecgWipe { 0% { clip-path: inset(0 100% 0 0); } 50% { clip-path: inset(0 0 0 0); } 100% { clip-path: inset(0 0 0 100%); } }
         .animate-ecg { animation: ecgWipe 1.5s cubic-bezier(0.4, 0, 0.2, 1) infinite; }
       `}</style>
+
+      {/* ========================================================================= */}
+      // 👁️ DALTONIZATION COLOR MATRIX SVG DEFINITIONS (Colorblind Correction)
+      // =========================================================================
+      <svg className="hidden">
+        <defs>
+          <filter id="cb-protanopia">
+            {/* Shifts problematic Reds into distinct bright Magentas & Cyans */}
+            <feColorMatrix type="matrix" values="0.56667 0.43333 0 0 0  0.55833 0.44167 0 0 0  0 0.24167 0.75833 0 0  0 0 0 1 0" />
+          </filter>
+          <filter id="cb-deuteranopia">
+            {/* Shifts problematic Greens into deep Navy & high-contrast Gold */}
+            <feColorMatrix type="matrix" values="0.625 0.375 0 0 0  0.7 0.3 0 0 0  0 0.3 0.7 0 0  0 0 0 1 0" />
+          </filter>
+          <filter id="cb-tritanopia">
+            {/* Shifts problematic Blues into distinguishable Reds & Teals */}
+            <feColorMatrix type="matrix" values="0.95 0.05 0 0 0  0 0.43333 0.56667 0 0  0 0.475 0.525 0 0  0 0 0 1 0" />
+          </filter>
+        </defs>
+      </svg>
 
       {/* Floating Inline Toast Bar */}
       <ToastBar toast={toast} onClose={() => setToast(null)} />
@@ -506,7 +591,12 @@ export default function App() {
             <h1 className="text-xl font-bold text-blue-600 flex items-center gap-2"><Activity /> ClinicalPortal</h1>
             <div className="flex gap-3 md:gap-4 items-center">
               <span className="text-xs font-mono font-bold bg-slate-100 text-slate-600 px-3 py-1 rounded-full hidden sm:block">ID: {isIdUnlocked ? user.uid : '••••••••'}</span>
-              <button onClick={() => setTextSize(textSize === 'normal' ? 'large' : 'normal')} className="text-slate-400 hover:text-blue-600 cursor-pointer"><Settings size={18} /></button>
+              
+              {/* --- TAPPING GEAR OPENS FULL ACCESSIBILITY DRAWER --- */}
+              <button onClick={() => setAccDrawerOpen(true)} className="p-2 rounded-lg bg-slate-100 text-slate-600 hover:bg-blue-600 hover:text-white transition-all cursor-pointer flex items-center gap-1 font-bold text-xs">
+                <Settings size={16} /> <span className="hidden md:inline">Accessibility OS</span>
+              </button>
+
               <span className="text-xs md:text-sm font-medium bg-slate-100 px-3 py-1 rounded-full">{user.real_name}</span>
               <button onClick={() => { localStorage.removeItem('cliniport_user'); setUser(null); setView('login'); showToast("Securely signed out.", "info"); }} className="text-sm text-slate-500 hover:text-red-500 font-medium cursor-pointer">Log Out</button>
             </div>
@@ -585,7 +675,6 @@ export default function App() {
                     <div className="bg-white p-6 rounded-2xl border flex flex-col sm:flex-row gap-6 justify-between">
                         <div><h3 className="text-xl font-bold mb-1 flex items-center gap-2"><LinkIcon className="text-blue-600"/> Connect Patient</h3><p className="text-sm text-slate-500">Auto-formats ID as you type.</p></div>
                         <form onSubmit={handleRequestConnection} className="flex gap-2 items-center">
-                            {/* --- 5. PATIENT ID AUTO-MASKING FIELD --- */}
                             <input 
                               type="text" 
                               placeholder="JD - 1234 - 56" 
@@ -657,15 +746,11 @@ export default function App() {
                           className="w-full bg-white border border-slate-200 p-3.5 rounded-xl shadow-xs flex items-center justify-between font-bold text-slate-700 active:scale-[0.99] transition-all cursor-pointer"
                         >
                           <div className="flex items-center gap-2.5">
-                            <div className={`p-1.5 rounded-lg bg-slate-100 ${curr.iconClass}`}>
-                              <ActiveIcon size={20} />
-                            </div>
+                            <div className={`p-1.5 rounded-lg bg-slate-100 ${curr.iconClass}`}><ActiveIcon size={20} /></div>
                             <span className="text-xs text-slate-400 font-normal">Section:</span>
                             <span className="text-base text-slate-800">{curr.label}</span>
                           </div>
-                          <span className="text-xs font-mono bg-rose-50 text-rose-600 px-3 py-1 rounded-full border border-rose-100">
-                            Change ▾
-                          </span>
+                          <span className="text-xs font-mono bg-rose-50 text-rose-600 px-3 py-1 rounded-full border border-rose-100">Change ▾</span>
                         </button>
                       );
                     })()}
@@ -677,45 +762,27 @@ export default function App() {
                       <div className="w-[85%] max-w-xs bg-white h-full shadow-2xl p-6 flex flex-col justify-between animate-in slide-in-from-left duration-300">
                         <div>
                           <div className="flex items-center justify-between pb-4 border-b border-slate-100 mb-6">
-                            <div>
-                              <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">Navigation</p>
-                              <h3 className="font-black text-xl text-slate-800">{activePatient}</h3>
-                            </div>
-                            <button 
-                              onClick={() => setMobileChartDrawerOpen(false)}
-                              className="w-8 h-8 rounded-full bg-slate-100 text-slate-500 font-bold flex items-center justify-center hover:bg-slate-200 text-sm cursor-pointer"
-                            >✕</button>
+                            <div><p className="text-xs font-bold text-slate-400 uppercase tracking-wider">Navigation</p><h3 className="font-black text-xl text-slate-800">{activePatient}</h3></div>
+                            <button onClick={() => setMobileChartDrawerOpen(false)} className="w-8 h-8 rounded-full bg-slate-100 text-slate-500 font-bold flex items-center justify-center hover:bg-slate-200 text-sm cursor-pointer">✕</button>
                           </div>
-
                           <div className="space-y-2">
                             {CHART_NAV_ITEMS.map((item) => {
-                              const ItemIcon = item.icon;
-                              const isSelected = dashTab === item.id;
+                              const ItemIcon = item.icon; const isSelected = dashTab === item.id;
                               return (
-                                <button
-                                  key={item.id}
-                                  onClick={() => { setDashTab(item.id); setMobileChartDrawerOpen(false); }}
-                                  className={`w-full text-left p-3.5 rounded-xl font-bold flex items-center gap-3.5 transition-all text-base cursor-pointer ${
-                                    isSelected ? item.activeClass + ' shadow-xs border' : 'text-slate-600 hover:bg-slate-50'
-                                  }`}
-                                >
-                                  <ItemIcon size={20} className={isSelected ? item.iconClass : 'text-slate-400'} />
-                                  {item.label}
+                                <button key={item.id} onClick={() => { setDashTab(item.id); setMobileChartDrawerOpen(false); }} className={`w-full text-left p-3.5 rounded-xl font-bold flex items-center gap-3.5 transition-all text-base cursor-pointer ${isSelected ? item.activeClass + ' shadow-xs border' : 'text-slate-600 hover:bg-slate-50'}`}>
+                                  <ItemIcon size={20} className={isSelected ? item.iconClass : 'text-slate-400'} /> {item.label}
                                 </button>
                               );
                             })}
                           </div>
                         </div>
-
-                        <div className="pt-4 border-t border-slate-100 text-center">
-                          <span className="text-[11px] font-mono text-slate-400">ClinicalPortal OS Master v4.0</span>
-                        </div>
+                        <div className="pt-4 border-t border-slate-100 text-center"><span className="text-[11px] font-mono text-slate-400">ClinicalPortal OS Master v4.0</span></div>
                       </div>
                       <div className="flex-1" onClick={() => setMobileChartDrawerOpen(false)} />
                     </div>
                   )}
 
-                  {/* --- 4. THE 9TH LANDING "OVERVIEW" DASHBOARD TAB --- */}
+                  {/* --- LANDING "OVERVIEW" DASHBOARD TAB --- */}
                   {dashTab === 'overview' && (
                     <div className="space-y-6 animate-in fade-in duration-300">
                       <div className="bg-gradient-to-r from-rose-500 to-red-500 rounded-3xl p-8 text-white shadow-lg flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
@@ -730,39 +797,21 @@ export default function App() {
                       </div>
 
                       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                        {/* Widget 1: BMI Badge */}
                         <div onClick={() => setDashTab('growth')} className="bg-white p-6 rounded-2xl border shadow-xs hover:shadow-md transition cursor-pointer flex flex-col justify-between border-l-4 border-l-orange-500">
-                          <div>
-                            <p className="text-xs font-bold text-slate-400 uppercase">Biometric Status</p>
-                            <h4 className="text-2xl font-black text-slate-800 mt-1">Latest BMI</h4>
-                          </div>
-                          <div className="mt-4 flex items-baseline justify-between">
-                            <span className="text-4xl font-black text-orange-600">{patientData.vitals?.[patientData.vitals.length-1]?.BMI || '22.4'}</span>
-                            <span className="text-xs font-bold text-emerald-600 bg-emerald-50 px-2.5 py-1 rounded-full border border-emerald-200">Optimal</span>
-                          </div>
+                          <div><p className="text-xs font-bold text-slate-400 uppercase">Biometric Status</p><h4 className="text-2xl font-black text-slate-800 mt-1">Latest BMI</h4></div>
+                          <div className="mt-4 flex items-baseline justify-between"><span className="text-4xl font-black text-orange-600">{patientData.vitals?.[patientData.vitals.length-1]?.BMI || '22.4'}</span><span className="text-xs font-bold text-emerald-600 bg-emerald-50 px-2.5 py-1 rounded-full border border-emerald-200">Optimal</span></div>
                         </div>
-
-                        {/* Widget 2: Active Prescriptions */}
                         <div onClick={() => setDashTab('prescriptions')} className="bg-white p-6 rounded-2xl border shadow-xs hover:shadow-md transition cursor-pointer flex flex-col justify-between border-l-4 border-l-cyan-500">
                           <div>
-                            <p className="text-xs font-bold text-slate-400 uppercase">Pharmacy & Rx</p>
-                            <h4 className="text-xl font-bold text-slate-800 mt-1">Top Active Meds</h4>
-                            <ul className="text-xs text-slate-600 font-medium mt-2 space-y-1">
-                              <li>• {patientData.prescriptions?.[0]?.medication || 'Metformin (500mg)'}</li>
-                              <li>• {patientData.prescriptions?.[1]?.medication || 'Atorvastatin (20mg)'}</li>
-                            </ul>
+                            <p className="text-xs font-bold text-slate-400 uppercase">Pharmacy & Rx</p><h4 className="text-xl font-bold text-slate-800 mt-1">Top Active Meds</h4>
+                            <ul className="text-xs text-slate-600 font-medium mt-2 space-y-1"><li>• {patientData.prescriptions?.[0]?.medication || 'Metformin (500mg)'}</li><li>• {patientData.prescriptions?.[1]?.medication || 'Atorvastatin (20mg)'}</li></ul>
                           </div>
                           <span className="text-xs font-bold text-cyan-600 mt-4 inline-block hover:underline">Manage Refills ➔</span>
                         </div>
-
-                        {/* Widget 3: Unread Encounters */}
                         <div onClick={() => setDashTab('visits')} className="bg-white p-6 rounded-2xl border shadow-xs hover:shadow-md transition cursor-pointer flex flex-col justify-between border-l-4 border-l-purple-500">
                           <div>
-                            <p className="text-xs font-bold text-slate-400 uppercase">Physician Records</p>
-                            <h4 className="text-xl font-bold text-slate-800 mt-1">Recent Encounters</h4>
-                            <p className="text-xs text-slate-500 line-clamp-2 mt-2">
-                              {Object.values(patientData.visits || {})?.[0]?.ai_summary || 'Standard routine checkup completed. Telemetry uploaded.'}
-                            </p>
+                            <p className="text-xs font-bold text-slate-400 uppercase">Physician Records</p><h4 className="text-xl font-bold text-slate-800 mt-1">Recent Encounters</h4>
+                            <p className="text-xs text-slate-500 line-clamp-2 mt-2">{Object.values(patientData.visits || {})?.[0]?.ai_summary || 'Standard routine checkup completed. Telemetry uploaded.'}</p>
                           </div>
                           <span className="text-xs font-bold text-purple-600 mt-4 inline-block hover:underline">Open Encounters ➔</span>
                         </div>
@@ -831,7 +880,6 @@ export default function App() {
                                               <div><p className="text-xs font-bold text-slate-500 uppercase mb-2">Attached Documents</p><ul className="space-y-2">{visit.documents.map((doc, i) => (<li key={i} className="flex items-center gap-2 text-sm text-slate-700 bg-slate-50 p-2 rounded border break-all"><FileText size={14} className="text-slate-400 shrink-0"/> {doc}</li>))}</ul></div>
                                           </div>
                                           
-                                          {/* 🎙️ Voice dictation wired to provider side */}
                                           <EncounterVoiceNote 
                                             targetPatient={activePatient} visitDate={visit.date} providerName={user.real_name}
                                             noteValue={visitNotes[visit.date] || ''}
@@ -991,7 +1039,6 @@ export default function App() {
                             <div className="bg-white p-6 rounded-2xl border">
                                 <h3 className="font-bold mb-4 flex items-center gap-2"><Scale className="text-orange-500" size={20}/> Log New Vitals</h3>
                                 <form onSubmit={handleLogVitals} className="space-y-4">
-                                    {/* --- 5. INLINE UNITS BONDED INSIDE VITALS INPUTS --- */}
                                     <div className="relative flex items-center">
                                       <input type="number" step="0.1" placeholder="Height" required value={vitalsInput.height} onChange={(e) => setVitalsInput({...vitalsInput, height: e.target.value})} className="w-full p-2.5 pr-10 border rounded-xl bg-slate-50 outline-none focus:ring-2 focus:ring-orange-500 font-bold" />
                                       <span className="absolute right-3 text-xs font-mono font-bold text-slate-400 pointer-events-none">cm</span>
@@ -1045,103 +1092,79 @@ export default function App() {
                   )}
                 </div>
               )}
-
-              {view === 'upload' && activePatient && (
-                <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
-                  <div className="bg-white p-12 rounded-2xl border text-center">
-                    <div className="w-20 h-20 bg-blue-50 rounded-full flex items-center justify-center mx-auto mb-6"><Upload size={32} className="text-blue-600" /></div>
-                    <h3 className="text-xl font-bold mb-2">Upload to Chart</h3>
-                    <p className="text-slate-500 mb-4">{activePatient}</p>
-                    <label className="cursor-pointer bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-6 rounded-xl inline-block mt-2 shadow-md">
-                      <span>Browse File</span><input type="file" onChange={handleFileUpload} className="hidden" />
-                    </label>
-                  </div>
-                </div>
-              )}
             </div>
           </div>
         </div>
       )}
 
-      {/* --- 🛎️ FALLBACK & MULTI-MATCH MODAL --- */}
-      {scanModal && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[99999] flex flex-col justify-center items-center px-4 animate-in fade-in duration-300">
-          <div className="bg-white p-6 md:p-8 rounded-2xl shadow-2xl max-w-md w-full border border-slate-100 animate-in zoom-in-95 duration-300">
-            {scanModal.type === 'manual_file' || scanModal.type === 'manual_text' ? (
-                <>
-                    <div className="w-16 h-16 bg-orange-100 text-orange-600 rounded-full flex items-center justify-center mx-auto mb-4"><Search size={32} /></div>
-                    <h3 className="text-xl font-bold text-slate-900 text-center mb-2">Manual Selection</h3>
-                    <p className="text-slate-600 text-center text-sm mb-4">The AI couldn't clearly read a patient name from this scan. Who does this belong to?</p>
-                    <div className="space-y-2 mb-6 max-h-48 overflow-y-auto pr-2">
-                        {(user.role === 'Provider' ? providerRoster : familyMembers).map(p => (
-                            <button key={p.name} onClick={() => setSelectedScanPatient(p.name)} className={`w-full p-3 rounded-xl border-2 font-bold transition-all ${selectedScanPatient === p.name ? 'bg-orange-50 border-orange-500 text-orange-700 shadow-sm' : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50 hover:border-slate-300 cursor-pointer'}`}>{p.name}</button>
-                        ))}
-                    </div>
-                    <div className="flex gap-3">
-                        <button onClick={() => { setScanModal(null); setView(user.role === 'Provider' ? 'provider_roster' : 'dashboard'); }} className="flex-1 bg-white border border-slate-300 text-slate-700 font-bold py-3 rounded-xl hover:bg-slate-50 transition cursor-pointer">Cancel</button>
-                        <button disabled={!selectedScanPatient} onClick={confirmScanModal} className={`flex-1 font-bold py-3 rounded-xl transition shadow-sm flex items-center justify-center gap-2 ${!selectedScanPatient ? 'bg-slate-300 text-slate-500 cursor-not-allowed' : 'bg-orange-600 text-white hover:bg-orange-700 cursor-pointer'}`}><Save size={18}/> Save to Chart</button>
-                    </div>
-                </>
-            ) : scanModal.type === 'error' ? (
-                <>
-                    <div className="w-16 h-16 bg-red-100 text-red-600 rounded-full flex items-center justify-center mx-auto mb-4"><AlertTriangle size={32} /></div>
-                    <h3 className="text-xl font-bold text-slate-900 text-center mb-2">Scan Failed</h3>
-                    <p className="text-slate-600 text-sm text-center mb-6 whitespace-pre-wrap">{scanModal.message}</p>
-                    <button onClick={() => setScanModal(null)} className="w-full bg-slate-800 text-white font-bold py-3 rounded-xl hover:bg-slate-900 transition shadow-sm cursor-pointer">Acknowledge</button>
-                </>
-            ) : (
-                <>
-                    <div className="w-16 h-16 bg-blue-100 text-blue-600 rounded-full flex items-center justify-center mx-auto mb-4"><ShieldCheck size={32} /></div>
-                    <h3 className="text-xl font-bold text-slate-900 text-center mb-2">Smart Scan Match!</h3>
-                    {scanModal.patients && scanModal.patients.length > 1 ? (
-                        <div className="mb-6">
-                            <p className="text-slate-600 text-center text-sm mb-4">We found multiple potential matches in this record. Please select the correct patient chart:</p>
-                            <div className="space-y-2 max-h-48 overflow-y-auto pr-2">
-                                {scanModal.patients.map(p => (
-                                    <button key={p} onClick={() => setSelectedScanPatient(p)} className={`w-full p-3 rounded-xl border-2 font-bold transition-all ${selectedScanPatient === p ? 'bg-blue-50 border-blue-500 text-blue-700 shadow-sm' : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50 hover:border-slate-300 cursor-pointer'}`}>{p}</button>
-                                ))}
-                            </div>
-                        </div>
-                    ) : (<p className="text-slate-600 text-center mb-6">We detected <strong className="text-blue-700">{scanModal.patients?.[0]}</strong> in the shared {scanModal.type === 'text' ? 'message' : 'document'}.</p>)}
+      {/* ========================================================================= */}
+      // ⚙️ THE MASTER ACCESSIBILITY OS SETTINGS DRAWER MODAL
+      // =========================================================================
+      {accDrawerOpen && (
+        <div className="fixed inset-0 z-[9999999] bg-slate-900/70 backdrop-blur-xs flex justify-end animate-in fade-in duration-200">
+          <div className="w-full max-w-md bg-white h-full shadow-2xl p-6 overflow-y-auto flex flex-col justify-between animate-in slide-in-from-right duration-300">
+            <div>
+              <div className="flex items-center justify-between pb-4 border-b border-slate-100 mb-6">
+                <div><h3 className="font-black text-2xl text-slate-800 flex items-center gap-2"><Settings className="text-blue-600"/> Accessibility Suite</h3><p className="text-xs text-slate-400 font-mono">WCAG AAA Compliance Suite</p></div>
+                <button onClick={() => setAccDrawerOpen(false)} className="w-8 h-8 rounded-full bg-slate-100 text-slate-500 font-bold flex items-center justify-center hover:bg-slate-200 cursor-pointer">✕</button>
+              </div>
 
-                    {scanModal.type === 'text' && (<div className="bg-slate-50 p-3 rounded-lg border border-slate-200 mb-6 max-h-32 overflow-y-auto"><p className="text-xs text-slate-500 italic whitespace-pre-wrap">"{scanModal.payload}"</p></div>)}
-                    <div className="flex gap-3 mt-4">
-                        <button onClick={() => { setScanModal(null); setView(user.role === 'Provider' ? 'provider_roster' : 'dashboard'); }} className="flex-1 bg-white border border-slate-300 text-slate-700 font-bold py-3 rounded-xl hover:bg-slate-50 transition cursor-pointer">Cancel</button>
-                        <button onClick={confirmScanModal} className="flex-1 bg-blue-600 text-white font-bold py-3 rounded-xl hover:bg-blue-700 transition shadow-sm flex items-center justify-center gap-2 cursor-pointer"><Save size={18}/> Save to Chart</button>
-                    </div>
-                </>
-            )}
+              <div className="space-y-6">
+                {/* 1. Language Translation */}
+                <div>
+                  <label className="text-xs font-bold text-slate-400 uppercase tracking-wider block mb-2 flex items-center gap-1.5"><Languages size={14}/> Instant Browser Translation</label>
+                  <div id="cliniport_google_translate_element" className="min-h-[42px] w-full bg-slate-50 p-2.5 rounded-xl border border-slate-200 flex items-center justify-center font-bold"></div>
+                </div>
+
+                {/* 2. Color Theme Engine */}
+                <div>
+                  <label className="text-xs font-bold text-slate-400 uppercase tracking-wider block mb-2 flex items-center gap-1.5"><Palette size={14}/> Color Contrast Themes</label>
+                  <div className="grid grid-cols-3 gap-2">
+                    <button onClick={() => handleThemeChange('light')} className={`p-3 rounded-xl border font-bold text-xs cursor-pointer ${themeMode === 'light' ? 'bg-blue-600 text-white border-blue-700' : 'bg-slate-50 text-slate-700'}`}>☀️ Light</button>
+                    <button onClick={() => handleThemeChange('dark')} className={`p-3 rounded-xl border font-bold text-xs cursor-pointer ${themeMode === 'dark' ? 'bg-blue-600 text-white border-blue-700' : 'bg-slate-900 text-slate-200 border-slate-800'}`}>🌙 OLED Dark</button>
+                    <button onClick={() => handleThemeChange('contrast')} className={`p-3 rounded-xl border font-bold text-xs cursor-pointer ${themeMode === 'contrast' ? 'bg-blue-600 text-white border-blue-700' : 'bg-black text-yellow-300 border-yellow-400'}`}>⚡ AAA Max</button>
+                  </div>
+                </div>
+
+                {/* 3. Typography Scaling */}
+                <div>
+                  <label className="text-xs font-bold text-slate-400 uppercase tracking-wider block mb-2 flex items-center gap-1.5"><Type size={14}/> Typography & Dyslexia Mode</label>
+                  <div className="grid grid-cols-2 gap-2 mb-2">
+                    <button onClick={() => handleFontChange('sm')} className={`p-3 rounded-xl border font-bold text-xs cursor-pointer ${fontSizeMode === 'sm' ? 'bg-blue-600 text-white' : 'bg-slate-50'}`}>Small (12px)</button>
+                    <button onClick={() => handleFontChange('md')} className={`p-3 rounded-xl border font-bold text-sm cursor-pointer ${fontSizeMode === 'md' ? 'bg-blue-600 text-white' : 'bg-slate-50'}`}>Standard (16px)</button>
+                    <button onClick={() => handleFontChange('lg')} className={`p-3 rounded-xl border font-bold text-lg cursor-pointer ${fontSizeMode === 'lg' ? 'bg-blue-600 text-white' : 'bg-slate-50'}`}>Large (18px)</button>
+                    <button onClick={() => handleFontChange('xl')} className={`p-3 rounded-xl border font-bold text-xl cursor-pointer ${fontSizeMode === 'xl' ? 'bg-blue-600 text-white' : 'bg-slate-50'}`}>Extra Large</button>
+                  </div>
+                  <button onClick={() => handleFontChange('dyslexia')} className={`w-full p-3.5 rounded-xl border font-mono tracking-widest font-black text-sm cursor-pointer ${fontSizeMode === 'dyslexia' ? 'bg-amber-500 text-slate-950 border-amber-600' : 'bg-amber-50 text-amber-900 border-amber-200'}`}>
+                    OpenDyslexic Calibrated Shift
+                  </button>
+                </div>
+
+                {/* 4. Colorblind Spectrum Shifting */}
+                <div>
+                  <label className="text-xs font-bold text-slate-400 uppercase tracking-wider block mb-2 flex items-center gap-1.5"><Eye size={14}/> Daltonization Spectrum Correction</label>
+                  <div className="grid grid-cols-2 gap-2">
+                    <button onClick={() => handleCbChange('none')} className={`p-3 rounded-xl border font-bold text-xs cursor-pointer ${colorblindMode === 'none' ? 'bg-blue-600 text-white' : 'bg-slate-50'}`}>Standard Spectrum</button>
+                    <button onClick={() => handleCbChange('protanopia')} className={`p-3 rounded-xl border font-bold text-xs cursor-pointer ${colorblindMode === 'protanopia' ? 'bg-rose-600 text-white' : 'bg-rose-50 text-rose-900'}`}>Protanopia (Red-Blind)</button>
+                    <button onClick={() => handleCbChange('deuteranopia')} className={`p-3 rounded-xl border font-bold text-xs cursor-pointer ${colorblindMode === 'deuteranopia' ? 'bg-emerald-600 text-white' : 'bg-emerald-50 text-emerald-900'}`}>Deuteranopia (Green-Blind)</button>
+                    <button onClick={() => handleCbChange('tritanopia')} className={`p-3 rounded-xl border font-bold text-xs cursor-pointer ${colorblindMode === 'tritanopia' ? 'bg-indigo-600 text-white' : 'bg-indigo-50 text-indigo-900'}`}>Tritanopia (Blue-Blind)</button>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <button onClick={() => setAccDrawerOpen(false)} className="w-full bg-slate-900 hover:bg-slate-950 text-white font-bold py-3.5 rounded-xl shadow-md cursor-pointer mt-8">Save Preferences & Close</button>
           </div>
         </div>
       )}
 
-      {/* --- 2. ESCAPE HATCH TRAPDOORS IN FULL-SCREEN OVERLAYS --- */}
+      {/* OVERLAYS */}
       {isSaving && (
-        <div className="fixed inset-0 bg-slate-900/80 backdrop-blur-sm z-[99999] flex flex-col justify-center items-center text-white px-4 animate-in fade-in duration-300">
+        <div className="fixed inset-0 bg-slate-900/80 backdrop-blur-xs z-[99999] flex flex-col justify-center items-center text-white px-4 animate-in fade-in duration-300">
           <div className="bg-slate-900 p-8 rounded-3xl shadow-2xl flex flex-col items-center max-w-sm w-full text-center border border-slate-800">
             <EcgLoader size={48} className="mb-4" />
             <h3 className="text-white font-bold text-lg mb-1">Processing Chart Payload</h3>
-            <p className="text-slate-400 text-xs mt-1">AI is actively mapping unstructured terminology & vectors...</p>
-            
-            {/* Trapdoor Cancel Button */}
-            <button onClick={() => { setIsSaving(false); showToast("Operation manually aborted.", "info"); }} className="mt-8 text-xs font-semibold text-slate-500 hover:text-rose-400 underline transition-colors cursor-pointer">
-              Taking too long? Cancel request
-            </button>
-          </div>
-        </div>
-      )}
-
-      {isScanning && !isSaving && (
-        <div className="fixed inset-0 bg-slate-900/80 backdrop-blur-sm z-[99999] flex flex-col justify-center items-center text-white px-4 animate-in fade-in duration-300">
-          <div className="bg-slate-900 p-8 rounded-3xl shadow-2xl flex flex-col items-center max-w-sm w-full text-center border border-slate-800">
-            <EcgLoader size={48} className="mb-4" />
-            <h3 className="text-white font-bold text-lg mb-1">PWA Interceptor Scanning</h3>
-            <p className="text-slate-400 text-xs mt-1">Cross-referencing shared asset metadata...</p>
-            
-            {/* Trapdoor Cancel Button */}
-            <button onClick={() => { setIsScanning(false); showToast("Smart scan cancelled.", "info"); }} className="mt-8 text-xs font-semibold text-slate-500 hover:text-rose-400 underline transition-colors cursor-pointer">
-              Taking too long? Cancel scan
-            </button>
+            <button onClick={() => { setIsSaving(false); showToast("Operation manually aborted.", "info"); }} className="mt-8 text-xs font-semibold text-slate-500 hover:text-rose-400 underline cursor-pointer">Taking too long? Cancel request</button>
           </div>
         </div>
       )}

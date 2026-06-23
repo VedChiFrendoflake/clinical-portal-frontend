@@ -4,7 +4,18 @@ import { Activity, Upload, User, ShieldCheck, UserPlus, Search, Users, ActivityS
 
 const BACKEND_URL = "https://clinical-portal-backend-production.up.railway.app";
 
-// --- 🫀 SUB-COMPONENT: LEFT-TO-RIGHT ECG LOADER ---
+// --- 🗺️ THE 8 MASTER CHART TABS ---
+const CHART_NAV_ITEMS = [
+  { id: 'profile', label: 'Profile', icon: ClipboardList, activeClass: 'bg-emerald-50 text-emerald-700 border-emerald-200', iconClass: 'text-emerald-600' },
+  { id: 'visits', label: 'Encounters', icon: Stethoscope, activeClass: 'bg-purple-50 text-purple-700 border-purple-200', iconClass: 'text-purple-600' },
+  { id: 'prescriptions', label: 'Rx & Meds', icon: Pill, activeClass: 'bg-cyan-50 text-cyan-700 border-cyan-200', iconClass: 'text-cyan-600' },
+  { id: 'orders', label: 'Orders', icon: FileSignature, activeClass: 'bg-pink-50 text-pink-700 border-pink-200', iconClass: 'text-pink-600' },
+  { id: 'labs', label: 'Labs', icon: FlaskConical, activeClass: 'bg-blue-50 text-blue-700 border-blue-200', iconClass: 'text-blue-600' },
+  { id: 'growth', label: 'Vitals', icon: Ruler, activeClass: 'bg-orange-50 text-orange-700 border-orange-200', iconClass: 'text-orange-600' },
+  { id: 'vaccines', label: 'Vaccines', icon: Syringe, activeClass: 'bg-indigo-50 text-indigo-700 border-indigo-200', iconClass: 'text-indigo-600' },
+  { id: 'diseases', label: 'Screenings', icon: Bug, activeClass: 'bg-rose-50 text-rose-700 border-rose-200', iconClass: 'text-rose-600' },
+];
+
 const EcgLoader = ({ size = 48, className = "" }) => (
   <div className={`relative inline-block ${className}`} style={{ width: size, height: size }}>
     <Activity size={size} className="text-slate-200 absolute inset-0" />
@@ -12,8 +23,7 @@ const EcgLoader = ({ size = 48, className = "" }) => (
   </div>
 );
 
-// --- 🎙️ SUB-COMPONENT: AI VOICE DICTATION FOR PROVIDERS ---
-const EncounterVoiceNote = ({ targetPatient, visitDate, providerName, noteValue, setNoteValue, onSave, isPatient }) => {
+const EncounterVoiceNote = ({ targetPatient, visitDate, providerName, noteValue, setNoteValue, patientNoteValue, setPatientNoteValue, onSave, isPatient }) => {
   const [isRecording, setIsRecording] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
   const mediaRecorderRef = useRef(null);
@@ -50,16 +60,27 @@ const EncounterVoiceNote = ({ targetPatient, visitDate, providerName, noteValue,
     try {
       const res = await fetch(`${BACKEND_URL}/api/visit/voice`, { method: "POST", body: formData });
       const data = await res.json();
-      if (data.status === "success") setNoteValue(data.note);
+      if (data.status === "success") {
+          setNoteValue(data.doctor_note);
+          setPatientNoteValue(data.patient_note);
+      }
       else alert("AI Processing Failed: " + data.message);
     } catch (err) { alert("Upload failed. Check your network."); } finally { setIsProcessing(false); }
   };
 
   if (isPatient) {
     return (
-      <div className="flex flex-col h-full min-h-[200px]">
-        <p className="text-xs font-bold text-slate-500 uppercase mb-2">Original Clinical Note</p>
-        <textarea value={noteValue || 'No clinical notes recorded for this visit.'} readOnly className="w-full flex-grow p-3 border rounded-lg bg-slate-50 text-sm focus:ring-2 focus:ring-purple-500 outline-none resize-none mb-3"></textarea>
+      <div className="flex flex-col h-full gap-4">
+        {patientNoteValue && (
+            <div className="bg-pink-50 p-4 rounded-xl border border-pink-100 shadow-sm">
+                <p className="text-xs font-bold text-pink-700 uppercase mb-2 flex items-center gap-1"><HeartPulse size={14}/> Doctor's Note (For You)</p>
+                <div className="text-sm text-pink-900 whitespace-pre-wrap">{patientNoteValue}</div>
+            </div>
+        )}
+        <div className="flex-grow">
+            <p className="text-xs font-bold text-slate-500 uppercase mb-2">Original Clinical Note</p>
+            <textarea value={noteValue || 'No clinical notes recorded for this visit.'} readOnly className="w-full h-32 p-3 border rounded-lg bg-slate-50 text-sm focus:ring-2 focus:ring-purple-500 outline-none resize-none"></textarea>
+        </div>
       </div>
     );
   }
@@ -72,13 +93,20 @@ const EncounterVoiceNote = ({ targetPatient, visitDate, providerName, noteValue,
           {isRecording ? <><Square size={12}/> Stop & Process</> : isProcessing ? "🤖 Processing..." : <><Mic size={12}/> Dictate Note</>}
         </button>
       </div>
-      <textarea value={noteValue} onChange={(e) => setNoteValue(e.target.value)} placeholder="Type clinical notes manually, or dictate..." className="w-full flex-grow p-3 border rounded-lg bg-white text-sm focus:ring-2 focus:ring-purple-500 outline-none resize-none min-h-[100px] mb-3"></textarea>
+      <textarea value={noteValue} onChange={(e) => setNoteValue(e.target.value)} placeholder="Type clinical notes manually, or dictate to let AI generate both Clinical & Patient versions..." className="w-full flex-grow p-3 border rounded-lg bg-white text-sm focus:ring-2 focus:ring-purple-500 outline-none resize-none min-h-[100px]"></textarea>
+      
+      {patientNoteValue && (
+          <div className="bg-pink-50 p-3 rounded-lg border border-pink-100">
+              <p className="text-[10px] font-bold text-pink-700 uppercase mb-1 flex items-center gap-1"><HeartPulse size={12}/> AI Generated Patient Note</p>
+              <textarea value={patientNoteValue} onChange={(e) => setPatientNoteValue(e.target.value)} className="w-full p-2 border rounded bg-white text-xs outline-none min-h-[60px] resize-none focus:ring-2 focus:ring-pink-500"></textarea>
+          </div>
+      )}
+
       <button onClick={onSave} className="w-full bg-purple-600 text-white font-bold py-2 rounded-lg hover:bg-purple-700 transition shadow-sm flex items-center justify-center gap-2"><Save size={16}/> Save Visit Note</button>
     </div>
   );
 };
 
-// --- HELPER: Render Gemini Bold Text ---
 const renderFormattedText = (text) => {
   if (!text) return "No specific metrics detected.";
   const lines = text.split('\n');
@@ -111,7 +139,9 @@ export default function App() {
   const [activePatient, setActivePatient] = useState(''); 
   const [patientData, setPatientData] = useState({ ai_summary: '', categories: {}, vaccines: [], diseases: [], uploaded_files: [], vitals: [], personal_info: {}, profile: {}, visits: {}, prescriptions: [], ordered_tests: [] });
   const [activeCategory, setActiveCategory] = useState(''); const [selectedTestName, setSelectedTestName] = useState(''); 
-  const [searchQuery, setSearchQuery] = useState(''); const [dashTab, setDashTab] = useState('profile'); 
+  const [searchQuery, setSearchQuery] = useState(''); 
+  const [dashTab, setDashTab] = useState('profile'); 
+  const [mobileChartDrawerOpen, setMobileChartDrawerOpen] = useState(false); // <-- 📱 NEW SIDEBAR STATE
 
   const [connectIdInput, setConnectIdInput] = useState('');
   const [providerRoster, setProviderRoster] = useState([]); 
@@ -131,6 +161,7 @@ export default function App() {
   const [isEditingProfile, setIsEditingProfile] = useState(false);
   const [profileForm, setProfileForm] = useState({ genetic_conditions: '', chronic_diseases: '', allergies: '', notes: '' });
   const [visitNotes, setVisitNotes] = useState({});
+  const [visitPatientNotes, setVisitPatientNotes] = useState({});
   const [prescriptionInput, setPrescriptionInput] = useState({ medication_name: '', dosage: '', instructions: '' });
   const [orderInput, setOrderInput] = useState({ test_name: '', reason: '' });
 
@@ -193,9 +224,9 @@ export default function App() {
   useEffect(() => {
     if (patientData.profile) setProfileForm(patientData.profile);
     if (patientData.visits) {
-      const initialDNotes = {}; 
-      Object.values(patientData.visits).forEach(v => { initialDNotes[v.date] = v.doctor_note || ''; });
-      setVisitNotes(initialDNotes); 
+      const initialDNotes = {}; const initialPNotes = {};
+      Object.values(patientData.visits).forEach(v => { initialDNotes[v.date] = v.doctor_note || ''; initialPNotes[v.date] = v.patient_note || ''; });
+      setVisitNotes(initialDNotes); setVisitPatientNotes(initialPNotes);
     }
   }, [patientData]);
 
@@ -339,7 +370,7 @@ export default function App() {
 
   const handleSaveVisitNote = async (date) => {
     try { 
-        const res = await fetch(`${BACKEND_URL}/api/visit/note`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ target_patient: activePatient, visit_date: date, note: visitNotes[date], provider_name: user?.real_name || "Unknown Provider" }) }); 
+        const res = await fetch(`${BACKEND_URL}/api/visit/note`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ target_patient: activePatient, visit_date: date, note: visitNotes[date], patient_note: visitPatientNotes[date], provider_name: user?.real_name || "Unknown Provider" }) }); 
         const data = await res.json(); alert(data.message); fetchPatientData(activePatient); 
     } catch (err) { alert("Failed to save note."); }
   };
@@ -548,17 +579,92 @@ export default function App() {
 
               {view === 'dashboard' && activePatient && (
                 <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
-                  <div className="bg-white p-2 rounded-xl border flex gap-2 overflow-x-auto snap-x mb-6">
-                     <button onClick={() => setDashTab('profile')} className={`flex-1 min-w-[120px] py-3 rounded-lg font-bold flex items-center justify-center gap-2 ${dashTab === 'profile' ? 'bg-emerald-50 text-emerald-700' : 'text-slate-500 hover:bg-slate-50'}`}><ClipboardList size={18}/> Profile</button>
-                     <button onClick={() => setDashTab('visits')} className={`flex-1 min-w-[120px] py-3 rounded-lg font-bold flex items-center justify-center gap-2 ${dashTab === 'visits' ? 'bg-purple-50 text-purple-700' : 'text-slate-500 hover:bg-slate-50'}`}><Stethoscope size={18}/> Encounters</button>
-                     <button onClick={() => setDashTab('prescriptions')} className={`flex-1 min-w-[120px] py-3 rounded-lg font-bold flex items-center justify-center gap-2 ${dashTab === 'prescriptions' ? 'bg-cyan-50 text-cyan-700' : 'text-slate-500 hover:bg-slate-50'}`}><Pill size={18}/> Rx & Meds</button>
-                     <button onClick={() => setDashTab('orders')} className={`flex-1 min-w-[120px] py-3 rounded-lg font-bold flex items-center justify-center gap-2 ${dashTab === 'orders' ? 'bg-pink-50 text-pink-700' : 'text-slate-500 hover:bg-slate-50'}`}><FileSignature size={18}/> Orders</button>
-                     <button onClick={() => setDashTab('labs')} className={`flex-1 min-w-[120px] py-3 rounded-lg font-bold flex items-center justify-center gap-2 ${dashTab === 'labs' ? 'bg-blue-50 text-blue-700' : 'text-slate-500 hover:bg-slate-50'}`}><FlaskConical size={18}/> Labs</button>
-                     <button onClick={() => setDashTab('growth')} className={`flex-1 min-w-[120px] py-3 rounded-lg font-bold flex items-center justify-center gap-2 ${dashTab === 'growth' ? 'bg-orange-50 text-orange-700' : 'text-slate-500 hover:bg-slate-50'}`}><Ruler size={18}/> Vitals</button>
-                     <button onClick={() => setDashTab('vaccines')} className={`flex-1 min-w-[120px] py-3 rounded-lg font-bold flex items-center justify-center gap-2 ${dashTab === 'vaccines' ? 'bg-indigo-50 text-indigo-700' : 'text-slate-500 hover:bg-slate-50'}`}><Syringe size={18}/> Vaccines</button>
-                     <button onClick={() => setDashTab('diseases')} className={`flex-1 min-w-[120px] py-3 rounded-lg font-bold flex items-center justify-center gap-2 ${dashTab === 'diseases' ? 'bg-rose-50 text-rose-700' : 'text-slate-500 hover:bg-slate-50'}`}><Bug size={18}/> Screenings</button>
+                  
+                  {/* --- 🖥️ DESKTOP TABS (Hidden on Mobile) --- */}
+                  <div className="hidden lg:flex bg-white p-2 rounded-xl border gap-2 mb-6 overflow-x-auto">
+                    {CHART_NAV_ITEMS.map(tab => (
+                      <button 
+                        key={tab.id}
+                        onClick={() => setDashTab(tab.id)} 
+                        className={`flex-1 min-w-[120px] py-3 rounded-lg font-bold flex items-center justify-center gap-2 transition-all ${
+                          dashTab === tab.id ? tab.activeClass : 'text-slate-500 hover:bg-slate-50'
+                        }`}
+                      >
+                        <tab.icon size={18} className={dashTab === tab.id ? tab.iconClass : ''}/> {tab.label}
+                      </button>
+                    ))}
                   </div>
 
+                  {/* --- 📱 MOBILE MENU TRIGGER BUTTON (Hidden on Desktop) --- */}
+                  <div className="lg:hidden mb-4">
+                    {(() => {
+                      const curr = CHART_NAV_ITEMS.find(t => t.id === dashTab) || CHART_NAV_ITEMS[0];
+                      const ActiveIcon = curr.icon;
+                      return (
+                        <button
+                          onClick={() => setMobileChartDrawerOpen(true)}
+                          className="w-full bg-white border border-slate-200 p-3.5 rounded-xl shadow-xs flex items-center justify-between font-bold text-slate-700 active:scale-[0.99] transition-all"
+                        >
+                          <div className="flex items-center gap-2.5">
+                            <div className={`p-1.5 rounded-lg bg-slate-100 ${curr.iconClass}`}>
+                              <ActiveIcon size={20} />
+                            </div>
+                            <span className="text-xs text-slate-400 font-normal">Section:</span>
+                            <span className="text-base text-slate-800">{curr.label}</span>
+                          </div>
+                          <span className="text-xs font-mono bg-blue-50 text-blue-600 px-3 py-1 rounded-full border border-blue-100">
+                            Change ▾
+                          </span>
+                        </button>
+                      );
+                    })()}
+                  </div>
+
+                  {/* --- 📱 MOBILE GLASS SIDEBAR DRAWER --- */}
+                  {mobileChartDrawerOpen && (
+                    <div className="fixed inset-0 z-[999999] bg-slate-900/60 backdrop-blur-xs flex animate-in fade-in duration-200 lg:hidden">
+                      <div className="w-[85%] max-w-xs bg-white h-full shadow-2xl p-6 flex flex-col justify-between animate-in slide-in-from-left duration-300">
+                        <div>
+                          <div className="flex items-center justify-between pb-4 border-b border-slate-100 mb-6">
+                            <div>
+                              <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">Navigation</p>
+                              <h3 className="font-black text-xl text-slate-800">{activePatient}</h3>
+                            </div>
+                            <button 
+                              onClick={() => setMobileChartDrawerOpen(false)}
+                              className="w-8 h-8 rounded-full bg-slate-100 text-slate-500 font-bold flex items-center justify-center hover:bg-slate-200 text-sm"
+                            >✕</button>
+                          </div>
+
+                          <div className="space-y-2">
+                            {CHART_NAV_ITEMS.map((item) => {
+                              const ItemIcon = item.icon;
+                              const isSelected = dashTab === item.id;
+                              return (
+                                <button
+                                  key={item.id}
+                                  onClick={() => { setDashTab(item.id); setMobileChartDrawerOpen(false); }}
+                                  className={`w-full text-left p-3.5 rounded-xl font-bold flex items-center gap-3.5 transition-all text-base ${
+                                    isSelected ? item.activeClass + ' shadow-xs border' : 'text-slate-600 hover:bg-slate-50'
+                                  }`}
+                                >
+                                  <ItemIcon size={20} className={isSelected ? item.iconClass : 'text-slate-400'} />
+                                  {item.label}
+                                </button>
+                              );
+                            })}
+                          </div>
+                        </div>
+
+                        <div className="pt-4 border-t border-slate-100 text-center">
+                          <span className="text-[11px] font-mono text-slate-400">ClinicalPortal OS v3.2</span>
+                        </div>
+                      </div>
+                      <div className="flex-1" onClick={() => setMobileChartDrawerOpen(false)} />
+                    </div>
+                  )}
+
+                  {/* --- TAB CONTENTS --- */}
                   {dashTab === 'profile' && (
                      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                         <div className="lg:col-span-1 bg-white p-6 rounded-2xl border h-fit">
@@ -612,7 +718,7 @@ export default function App() {
                                                   <p className="text-xs font-bold text-blue-700 uppercase mb-2 flex items-center gap-1"><BookOpen size={14}/> Terminology Guide</p>
                                                   <ul className="space-y-2">
                                                     {Object.entries(visit.ai_terminology).map(([term, definition], i) => (
-                                                      <li key={i} className="text-sm text-blue-900 bg-white p-2 rounded shadow-sm border border-blue-50"><strong>{term}:</strong> {definition}</li>
+                                                      <li key={i} className="text-sm text-blue-900 bg-white p-2 rounded border border-blue-50"><strong>{term}:</strong> {definition}</li>
                                                     ))}
                                                   </ul>
                                                 </div>
@@ -632,7 +738,7 @@ export default function App() {
                                       </div>
                                   </div>
                               ))
-                          ) : (<div className="bg-white p-12 text-center rounded-2xl border"><p className="text-slate-500">No encounters.</p></div>)}
+                          ) : (<div className="bg-white p-12 text-center rounded-2xl border border-slate-100 border-dashed"><p className="text-slate-500">No recorded encounters.</p></div>)}
                       </div>
                   )}
 
@@ -711,7 +817,7 @@ export default function App() {
                                ))}
                            </div>
                            {patientData.categories[activeCategory]?.length > 0 && (
-                               <div className="bg-white p-4 rounded-xl border border-slate-200 flex gap-4 mt-4">
+                               <div className="bg-white p-4 rounded-xl border flex gap-4 mt-4">
                                    <select value={selectedTestName} onChange={(e) => setSelectedTestName(e.target.value)} className="p-3 border rounded-lg bg-slate-50 font-semibold w-full focus:ring-2">
                                        {patientData.categories[activeCategory].map(test => (<option key={test.test_name} value={test.test_name}>{test.test_name}</option>))}
                                    </select>

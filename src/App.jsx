@@ -13,7 +13,7 @@ const EcgLoader = ({ size = 48, className = "" }) => (
 );
 
 // --- 🎙️ SUB-COMPONENT: AI VOICE DICTATION FOR PROVIDERS ---
-const EncounterVoiceNote = ({ targetPatient, visitDate, providerName, noteValue, setNoteValue, patientNoteValue, setPatientNoteValue, onSave, isPatient }) => {
+const EncounterVoiceNote = ({ targetPatient, visitDate, providerName, noteValue, setNoteValue, onSave, isPatient }) => {
   const [isRecording, setIsRecording] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
   const mediaRecorderRef = useRef(null);
@@ -30,7 +30,7 @@ const EncounterVoiceNote = ({ targetPatient, visitDate, providerName, noteValue,
         await uploadVoiceNote(audioBlob);
       };
       mediaRecorderRef.current.start(); setIsRecording(true);
-    } catch (err) { alert("Microphone access denied."); }
+    } catch (err) { alert("Microphone access denied. Please verify browser permissions."); }
   };
 
   const stopRecording = () => {
@@ -43,32 +43,23 @@ const EncounterVoiceNote = ({ targetPatient, visitDate, providerName, noteValue,
   const uploadVoiceNote = async (audioBlob) => {
     setIsProcessing(true);
     const formData = new FormData();
-    formData.append("file", audioBlob, "dictation.webm"); formData.append("target_patient", targetPatient);
-    formData.append("visit_date", visitDate); formData.append("provider_name", providerName);
+    formData.append("file", audioBlob, "dictation.webm"); 
+    formData.append("target_patient", targetPatient);
+    formData.append("visit_date", visitDate); 
+    formData.append("provider_name", providerName);
     try {
       const res = await fetch(`${BACKEND_URL}/api/visit/voice`, { method: "POST", body: formData });
       const data = await res.json();
-      if (data.status === "success") {
-          setNoteValue(data.doctor_note);
-          setPatientNoteValue(data.patient_note);
-      }
-      else alert("AI Failed: " + data.message);
-    } catch (err) { alert("Upload failed."); } finally { setIsProcessing(false); }
+      if (data.status === "success") setNoteValue(data.note);
+      else alert("AI Processing Failed: " + data.message);
+    } catch (err) { alert("Upload failed. Check your network."); } finally { setIsProcessing(false); }
   };
 
   if (isPatient) {
     return (
-      <div className="flex flex-col h-full gap-4">
-        {patientNoteValue && (
-            <div className="bg-pink-50 p-4 rounded-xl border border-pink-100 shadow-sm">
-                <p className="text-xs font-bold text-pink-700 uppercase mb-2 flex items-center gap-1"><HeartPulse size={14}/> Doctor's Note (For You)</p>
-                <div className="text-sm text-pink-900 whitespace-pre-wrap">{patientNoteValue}</div>
-            </div>
-        )}
-        <div className="flex-grow">
-            <p className="text-xs font-bold text-slate-500 uppercase mb-2">Original Clinical Note</p>
-            <textarea value={noteValue || 'No clinical notes recorded for this visit.'} readOnly className="w-full h-32 p-3 border rounded-lg bg-slate-50 text-sm focus:ring-2 focus:ring-purple-500 outline-none resize-none"></textarea>
-        </div>
+      <div className="flex flex-col h-full min-h-[200px]">
+        <p className="text-xs font-bold text-slate-500 uppercase mb-2">Original Clinical Note</p>
+        <textarea value={noteValue || 'No clinical notes recorded for this visit.'} readOnly className="w-full flex-grow p-3 border rounded-lg bg-slate-50 text-sm focus:ring-2 focus:ring-purple-500 outline-none resize-none mb-3"></textarea>
       </div>
     );
   }
@@ -81,20 +72,13 @@ const EncounterVoiceNote = ({ targetPatient, visitDate, providerName, noteValue,
           {isRecording ? <><Square size={12}/> Stop & Process</> : isProcessing ? "🤖 Processing..." : <><Mic size={12}/> Dictate Note</>}
         </button>
       </div>
-      <textarea value={noteValue} onChange={(e) => setNoteValue(e.target.value)} placeholder="Type clinical notes manually, or dictate to let AI generate both Clinical & Patient versions..." className="w-full flex-grow p-3 border rounded-lg bg-white text-sm focus:ring-2 focus:ring-purple-500 outline-none resize-none min-h-[100px] mb-3"></textarea>
-      
-      {patientNoteValue && (
-          <div className="bg-pink-50 p-3 rounded-lg border border-pink-100">
-              <p className="text-[10px] font-bold text-pink-700 uppercase mb-1 flex items-center gap-1"><HeartPulse size={12}/> AI Generated Patient Note</p>
-              <textarea value={patientNoteValue} onChange={(e) => setPatientNoteValue(e.target.value)} className="w-full p-2 border rounded bg-white text-xs outline-none min-h-[60px] resize-none focus:ring-2 focus:ring-pink-500"></textarea>
-          </div>
-      )}
-
+      <textarea value={noteValue} onChange={(e) => setNoteValue(e.target.value)} placeholder="Type clinical notes manually, or dictate..." className="w-full flex-grow p-3 border rounded-lg bg-white text-sm focus:ring-2 focus:ring-purple-500 outline-none resize-none min-h-[100px] mb-3"></textarea>
       <button onClick={onSave} className="w-full bg-purple-600 text-white font-bold py-2 rounded-lg hover:bg-purple-700 transition shadow-sm flex items-center justify-center gap-2"><Save size={16}/> Save Visit Note</button>
     </div>
   );
 };
 
+// --- HELPER: Render Gemini Bold Text ---
 const renderFormattedText = (text) => {
   if (!text) return "No specific metrics detected.";
   const lines = text.split('\n');
@@ -147,7 +131,6 @@ export default function App() {
   const [isEditingProfile, setIsEditingProfile] = useState(false);
   const [profileForm, setProfileForm] = useState({ genetic_conditions: '', chronic_diseases: '', allergies: '', notes: '' });
   const [visitNotes, setVisitNotes] = useState({});
-  const [visitPatientNotes, setVisitPatientNotes] = useState({});
   const [prescriptionInput, setPrescriptionInput] = useState({ medication_name: '', dosage: '', instructions: '' });
   const [orderInput, setOrderInput] = useState({ test_name: '', reason: '' });
 
@@ -210,9 +193,9 @@ export default function App() {
   useEffect(() => {
     if (patientData.profile) setProfileForm(patientData.profile);
     if (patientData.visits) {
-      const initialDNotes = {}; const initialPNotes = {};
-      Object.values(patientData.visits).forEach(v => { initialDNotes[v.date] = v.doctor_note || ''; initialPNotes[v.date] = v.patient_note || ''; });
-      setVisitNotes(initialDNotes); setVisitPatientNotes(initialPNotes);
+      const initialDNotes = {}; 
+      Object.values(patientData.visits).forEach(v => { initialDNotes[v.date] = v.doctor_note || ''; });
+      setVisitNotes(initialDNotes); 
     }
   }, [patientData]);
 
@@ -356,7 +339,7 @@ export default function App() {
 
   const handleSaveVisitNote = async (date) => {
     try { 
-        const res = await fetch(`${BACKEND_URL}/api/visit/note`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ target_patient: activePatient, visit_date: date, note: visitNotes[date], patient_note: visitPatientNotes[date], provider_name: user?.real_name || "Unknown Provider" }) }); 
+        const res = await fetch(`${BACKEND_URL}/api/visit/note`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ target_patient: activePatient, visit_date: date, note: visitNotes[date], provider_name: user?.real_name || "Unknown Provider" }) }); 
         const data = await res.json(); alert(data.message); fetchPatientData(activePatient); 
     } catch (err) { alert("Failed to save note."); }
   };
@@ -374,6 +357,11 @@ export default function App() {
   const handleAddOrder = async (e) => {
     e.preventDefault();
     try { await fetch(`${BACKEND_URL}/api/orders`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ target_patient: activePatient, ...orderInput }) }); setOrderInput({ test_name: '', reason: '' }); fetchPatientData(activePatient); } catch (err) {}
+  };
+
+  const handleCategoryClick = (category) => {
+    setActiveCategory(category); 
+    if (patientData.categories[category] && patientData.categories[category].length > 0) { setSelectedTestName(patientData.categories[category][0].test_name); } else { setSelectedTestName(''); }
   };
 
   const totalUnreadCount = pendingRequests.length + notifications.length;
@@ -608,16 +596,23 @@ export default function App() {
                                           <div className="space-y-4">
                                               
                                               <div className="bg-emerald-50 p-4 rounded-xl border border-emerald-100 shadow-sm">
-                                                <p className="text-xs font-bold text-emerald-700 uppercase mb-1">AI Visit Summary</p>
+                                                <p className="text-xs font-bold text-emerald-700 uppercase mb-1">AI Clinical Summary</p>
                                                 <div className="text-sm text-emerald-900 whitespace-pre-wrap">{renderFormattedText(visit.ai_summary)}</div>
                                               </div>
 
+                                              {visit.patient_note && (
+                                                  <div className="bg-pink-50 p-4 rounded-xl border border-pink-100 shadow-sm">
+                                                      <p className="text-xs font-bold text-pink-700 uppercase mb-1 flex items-center gap-1"><HeartPulse size={14}/> Patient Explanation</p>
+                                                      <div className="text-sm text-pink-900 whitespace-pre-wrap">{renderFormattedText(visit.patient_note)}</div>
+                                                  </div>
+                                              )}
+                                              
                                               {visit.ai_terminology && Object.keys(visit.ai_terminology).length > 0 && (
-                                                <div className="bg-blue-50 p-4 rounded-xl border border-blue-100 shadow-sm">
+                                                <div className="bg-blue-50 p-4 rounded-xl border border-blue-100">
                                                   <p className="text-xs font-bold text-blue-700 uppercase mb-2 flex items-center gap-1"><BookOpen size={14}/> Terminology Guide</p>
                                                   <ul className="space-y-2">
                                                     {Object.entries(visit.ai_terminology).map(([term, definition], i) => (
-                                                      <li key={i} className="text-sm text-blue-900 bg-white p-2 rounded border border-blue-50"><strong>{term}:</strong> {definition}</li>
+                                                      <li key={i} className="text-sm text-blue-900 bg-white p-2 rounded shadow-sm border border-blue-50"><strong>{term}:</strong> {definition}</li>
                                                     ))}
                                                   </ul>
                                                 </div>
@@ -631,28 +626,26 @@ export default function App() {
                                             targetPatient={activePatient} visitDate={visit.date} providerName={user.real_name}
                                             noteValue={visitNotes[visit.date] || ''}
                                             setNoteValue={(val) => setVisitNotes({...visitNotes, [visit.date]: val})}
-                                            patientNoteValue={visitPatientNotes[visit.date] || ''}
-                                            setPatientNoteValue={(val) => setVisitPatientNotes({...visitPatientNotes, [visit.date]: val})}
                                             onSave={() => handleSaveVisitNote(visit.date)}
                                             isPatient={user.role === 'Patient'}
                                           />
                                       </div>
                                   </div>
                               ))
-                          ) : (<div className="bg-white p-12 text-center rounded-2xl border border-slate-100 border-dashed"><p className="text-slate-500">No recorded encounters.</p></div>)}
+                          ) : (<div className="bg-white p-12 text-center rounded-2xl border"><p className="text-slate-500">No encounters.</p></div>)}
                       </div>
                   )}
 
                   {dashTab === 'prescriptions' && (
                      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 animate-in fade-in duration-300">
-                        <div className="lg:col-span-2 bg-white rounded-2xl shadow-sm border border-slate-100 h-fit">
-                            <div className="bg-slate-50 px-6 py-4 border-b flex justify-between items-center"><h3 className="font-bold text-slate-800 text-lg flex items-center gap-2"><Pill className="text-cyan-600"/> Active Medications</h3></div>
+                        <div className="lg:col-span-2 bg-white rounded-2xl border h-fit">
+                            <div className="bg-slate-50 px-6 py-4 border-b flex justify-between items-center"><h3 className="font-bold text-lg flex items-center gap-2"><Pill className="text-cyan-600"/> Active Medications</h3></div>
                             <div className="p-6">
                                 {patientData.prescriptions && patientData.prescriptions.length > 0 ? (
                                     <ul className="space-y-4">
                                         {patientData.prescriptions.map((rx, idx) => (
-                                            <li key={idx} className="p-4 border rounded-xl bg-cyan-50 border-cyan-100 hover:shadow-md transition-shadow">
-                                                <div className="flex justify-between sm:items-start mb-2"><h4 className="font-bold text-cyan-900 text-lg">{rx.medication}</h4><span className="text-xs font-bold text-cyan-600 bg-white px-2 py-1 rounded border">Ordered: {rx.date}</span></div>
+                                            <li key={idx} className="p-4 border rounded-xl bg-cyan-50 border-cyan-100 hover:shadow-md">
+                                                <div className="flex justify-between mb-2"><h4 className="font-bold text-cyan-900 text-lg">{rx.medication}</h4><span className="text-xs font-bold text-cyan-600 bg-white px-2 py-1 rounded border">Ordered: {rx.date}</span></div>
                                                 <p className="text-sm font-semibold text-cyan-800 mb-1">Dosage: {rx.dosage}</p><p className="text-sm text-cyan-700 italic">"{rx.instructions}"</p>
                                             </li>
                                         ))}
@@ -662,12 +655,12 @@ export default function App() {
                         </div>
                         {user.role === 'Provider' && (
                             <div className="lg:col-span-1">
-                                <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100">
-                                    <h3 className="font-bold text-slate-800 mb-4 flex items-center gap-2"><Edit3 className="text-cyan-600" size={20}/> New Prescription</h3>
+                                <div className="bg-white p-6 rounded-2xl border">
+                                    <h3 className="font-bold mb-4 flex items-center gap-2"><Edit3 className="text-cyan-600" size={20}/> New Prescription</h3>
                                     <form onSubmit={handleAddPrescription} className="space-y-4">
-                                        <div><label className="text-xs font-bold text-slate-500 uppercase">Medication Name</label><input type="text" required value={prescriptionInput.medication_name} onChange={e => setPrescriptionInput({...prescriptionInput, medication_name: e.target.value})} className="w-full p-2 border rounded bg-slate-50 focus:ring-2" /></div>
-                                        <div><label className="text-xs font-bold text-slate-500 uppercase">Dosage</label><input type="text" required value={prescriptionInput.dosage} onChange={e => setPrescriptionInput({...prescriptionInput, dosage: e.target.value})} className="w-full p-2 border rounded bg-slate-50 focus:ring-2" /></div>
-                                        <div><label className="text-xs font-bold text-slate-500 uppercase">Instructions (Sig)</label><textarea required value={prescriptionInput.instructions} onChange={e => setPrescriptionInput({...prescriptionInput, instructions: e.target.value})} className="w-full p-2 border rounded bg-slate-50 h-24 focus:ring-2"></textarea></div>
+                                        <div><input type="text" placeholder="Medication Name" required value={prescriptionInput.medication_name} onChange={e => setPrescriptionInput({...prescriptionInput, medication_name: e.target.value})} className="w-full p-2 border rounded bg-slate-50 focus:ring-2" /></div>
+                                        <div><input type="text" placeholder="Dosage" required value={prescriptionInput.dosage} onChange={e => setPrescriptionInput({...prescriptionInput, dosage: e.target.value})} className="w-full p-2 border rounded bg-slate-50 focus:ring-2" /></div>
+                                        <div><textarea placeholder="Instructions (Sig)" required value={prescriptionInput.instructions} onChange={e => setPrescriptionInput({...prescriptionInput, instructions: e.target.value})} className="w-full p-2 border rounded bg-slate-50 h-24 focus:ring-2"></textarea></div>
                                         <button type="submit" className="w-full bg-cyan-600 text-white font-bold py-2 rounded">Prescribe</button>
                                     </form>
                                 </div>
@@ -678,15 +671,15 @@ export default function App() {
 
                   {dashTab === 'orders' && (
                      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 animate-in fade-in duration-300">
-                        <div className="lg:col-span-2 bg-white rounded-2xl shadow-sm border border-slate-100 h-fit">
-                            <div className="bg-slate-50 px-6 py-4 border-b flex justify-between items-center"><h3 className="font-bold text-slate-800 text-lg flex items-center gap-2"><FileSignature className="text-pink-600"/> Lab & Imaging Orders</h3></div>
+                        <div className="lg:col-span-2 bg-white rounded-2xl border h-fit">
+                            <div className="bg-slate-50 px-6 py-4 border-b flex justify-between items-center"><h3 className="font-bold text-lg flex items-center gap-2"><FileSignature className="text-pink-600"/> Orders</h3></div>
                             <div className="p-6">
                                 {patientData.ordered_tests && patientData.ordered_tests.length > 0 ? (
                                     <ul className="space-y-4">
                                         {patientData.ordered_tests.map((order, idx) => (
                                             <li key={idx} className={`p-4 border rounded-xl hover:shadow-md ${order.status === 'Pending' ? 'bg-pink-50 border-pink-100' : 'bg-slate-50 border-slate-200'}`}>
-                                                <div className="flex justify-between sm:items-start mb-2"><h4 className={`font-bold text-lg ${order.status === 'Pending' ? 'text-pink-900' : 'text-slate-700 line-through'}`}>{order.test_name}</h4><span className={`text-xs font-bold px-2 py-1 rounded border ${order.status === 'Pending' ? 'text-pink-600 bg-white border-pink-200' : 'text-emerald-600 bg-emerald-50 border-emerald-200'}`}>{order.status}</span></div>
-                                                <p className={`text-sm italic ${order.status === 'Pending' ? 'text-pink-700' : 'text-slate-500'}`}>Reason: {order.reason}</p><p className="text-xs text-slate-400 mt-2">Ordered: {order.date}</p>
+                                                <div className="flex justify-between mb-2"><h4 className={`font-bold text-lg ${order.status === 'Pending' ? 'text-pink-900' : 'line-through'}`}>{order.test_name}</h4><span className="text-xs font-bold px-2 py-1 rounded border bg-white">{order.status}</span></div>
+                                                <p className="text-sm italic">Reason: {order.reason}</p><p className="text-xs text-slate-400 mt-2">Ordered: {order.date}</p>
                                             </li>
                                         ))}
                                     </ul>
@@ -695,11 +688,11 @@ export default function App() {
                         </div>
                         {user.role === 'Provider' && (
                             <div className="lg:col-span-1">
-                                <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100">
-                                    <h3 className="font-bold text-slate-800 mb-4 flex items-center gap-2"><Edit3 className="text-pink-600" size={20}/> New Order</h3>
+                                <div className="bg-white p-6 rounded-2xl border">
+                                    <h3 className="font-bold mb-4 flex items-center gap-2"><Edit3 className="text-pink-600" size={20}/> New Order</h3>
                                     <form onSubmit={handleAddOrder} className="space-y-4">
-                                        <div><label className="text-xs font-bold text-slate-500 uppercase">Test Name</label><input type="text" required value={orderInput.test_name} onChange={e => setOrderInput({...orderInput, test_name: e.target.value})} className="w-full p-2 border rounded bg-slate-50 focus:ring-2" /></div>
-                                        <div><label className="text-xs font-bold text-slate-500 uppercase">Clinical Reason (Dx)</label><textarea required value={orderInput.reason} onChange={e => setOrderInput({...orderInput, reason: e.target.value})} className="w-full p-2 border rounded bg-slate-50 h-24 focus:ring-2"></textarea></div>
+                                        <div><input type="text" placeholder="Test Name" required value={orderInput.test_name} onChange={e => setOrderInput({...orderInput, test_name: e.target.value})} className="w-full p-2 border rounded bg-slate-50" /></div>
+                                        <div><textarea placeholder="Clinical Reason (Dx)" required value={orderInput.reason} onChange={e => setOrderInput({...orderInput, reason: e.target.value})} className="w-full p-2 border rounded bg-slate-50 h-24"></textarea></div>
                                         <button type="submit" className="w-full bg-pink-600 text-white font-bold py-2 rounded">Sign Order</button>
                                     </form>
                                 </div>
@@ -714,12 +707,12 @@ export default function App() {
                          <>
                            <div className="flex gap-2 border-b border-slate-200 pb-2 relative z-10 overflow-x-auto">
                                {Object.keys(patientData.categories || {}).map(category => (
-                                   <button key={category} type="button" onClick={(e) => { e.preventDefault(); handleCategoryClick(category); }} className={`px-4 py-2 rounded-t-lg font-bold ${activeCategory === category ? 'bg-blue-600 text-white' : 'bg-slate-100'}`}>{category}</button>
+                                   <button key={category} type="button" onClick={(e) => { e.preventDefault(); handleCategoryClick(category); }} className={`cursor-pointer px-4 md:px-6 py-2 rounded-t-lg font-bold whitespace-nowrap ${activeCategory === category ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}>{category}</button>
                                ))}
                            </div>
                            {patientData.categories[activeCategory]?.length > 0 && (
-                               <div className="bg-white p-4 rounded-xl border flex gap-4 mt-4">
-                                   <select value={selectedTestName} onChange={(e) => setSelectedTestName(e.target.value)} className="p-3 border rounded-lg w-full">
+                               <div className="bg-white p-4 rounded-xl border border-slate-200 flex gap-4 mt-4">
+                                   <select value={selectedTestName} onChange={(e) => setSelectedTestName(e.target.value)} className="p-3 border rounded-lg bg-slate-50 font-semibold w-full focus:ring-2">
                                        {patientData.categories[activeCategory].map(test => (<option key={test.test_name} value={test.test_name}>{test.test_name}</option>))}
                                    </select>
                                </div>
@@ -729,8 +722,8 @@ export default function App() {
                                if (!activeTest) return null;
                                const sortedHistory = [...activeTest.history].sort((a, b) => new Date(a.Date) - new Date(b.Date));
                                return (
-                                   <div className="bg-white rounded-2xl border mt-6 flex flex-col">
-                                       <div className="bg-slate-50 px-6 py-4 border-b flex justify-between"><h3 className="font-bold text-lg">{activeTest.test_name}</h3><span className="text-sm bg-white border px-4 py-1.5 rounded-full">Range: {activeTest.normal_min} - {activeTest.normal_max} {activeTest.unit}</span></div>
+                                   <div className="bg-white rounded-2xl border overflow-hidden mt-6 flex flex-col">
+                                       <div className="bg-slate-50 px-6 py-4 border-b flex justify-between"><h3 className="font-bold text-lg">{activeTest.test_name} Trend Analysis</h3><span className="text-sm bg-white border px-4 py-1.5 rounded-full font-medium">Range: {activeTest.normal_min} - {activeTest.normal_max} {activeTest.unit}</span></div>
                                        <div className="grid grid-cols-1 lg:grid-cols-2">
                                            <div className="p-6 border-b lg:border-r h-80">
                                                <ResponsiveContainer width="100%" height="100%">
@@ -746,11 +739,11 @@ export default function App() {
                                                </ResponsiveContainer>
                                            </div>
                                            <div className="p-6 overflow-auto h-80">
-                                               <table className="w-full text-left">
+                                               <table className="w-full text-left min-w-[300px]">
                                                    <thead><tr><th className="pb-3 text-xs uppercase text-slate-400 border-b">Date</th><th className="pb-3 text-xs uppercase text-slate-400 border-b">Value</th><th className="pb-3 text-xs uppercase text-slate-400 border-b">Status</th></tr></thead>
                                                    <tbody>
                                                        {sortedHistory.map((record, i) => (
-                                                           <tr key={i}><td className="py-3 text-sm font-medium border-b">{record.Date}</td><td className="py-3 text-sm font-bold border-b">{record.Value} {activeTest.unit}</td><td className="py-3 border-b"><span className={`text-xs px-2 py-1 rounded-full font-bold ${record.Status === 'Normal' ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-700'}`}>{record.Status}</span></td></tr>
+                                                           <tr key={i} className="hover:bg-slate-50"><td className="py-3 text-sm font-medium border-b">{record.Date}</td><td className="py-3 text-sm font-bold border-b">{record.Value} {activeTest.unit}</td><td className="py-3 border-b"><span className={`text-xs px-2 py-1 rounded-full font-bold shadow-sm ${record.Status === 'Normal' ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-700'}`}>{record.Status}</span></td></tr>
                                                        ))}
                                                    </tbody>
                                                </table>
@@ -760,23 +753,23 @@ export default function App() {
                                );
                            })()}
                          </>
-                       ) : (<div className="bg-white p-12 text-center rounded-2xl border"><p className="text-slate-500">No lab data.</p></div>)}
+                       ) : (<div className="bg-white p-12 text-center rounded-2xl border"><p className="text-slate-500">No lab data available.</p></div>)}
                      </div>
                   )}
 
                   {dashTab === 'growth' && (
                      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 animate-in fade-in duration-300">
-                        <div className="lg:col-span-2 bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden flex flex-col h-[400px] lg:h-[550px]">
-                            <div className="bg-slate-50 px-4 md:px-6 py-4 border-b border-slate-100 flex justify-between items-center"><h3 className="font-bold text-slate-800 text-lg flex items-center gap-2"><ActivitySquare className="text-orange-600"/> Trajectory</h3></div>
-                            <div className="p-2 sm:p-6 flex-grow">
+                        <div className="lg:col-span-2 bg-white rounded-2xl border flex flex-col h-[550px]">
+                            <div className="bg-slate-50 px-6 py-4 border-b flex justify-between items-center"><h3 className="font-bold text-lg flex items-center gap-2"><ActivitySquare className="text-orange-600"/> Vitals Trajectory</h3></div>
+                            <div className="p-6 flex-grow">
                                 {patientData.vitals && patientData.vitals.length > 0 ? (
                                     <ResponsiveContainer width="100%" height="100%">
-                                      <LineChart data={patientData.vitals} margin={{ top: 10, right: 30, left: 0, bottom: 0 }}>
+                                      <LineChart data={patientData.vitals}>
                                         <CartesianGrid strokeDasharray="3 3" vertical={false} />
                                         <XAxis dataKey="Date" tick={{fontSize: 12}} />
-                                        <YAxis yAxisId="left" orientation="left" label={{ value: 'Height', angle: -90, position: 'insideLeft', style: {textAnchor: 'middle'} }} />
-                                        <YAxis yAxisId="right" orientation="right" label={{ value: 'Weight', angle: 90, position: 'insideRight', style: {textAnchor: 'middle'} }} />
-                                        <Tooltip contentStyle={{borderRadius: '8px'}} />
+                                        <YAxis yAxisId="left" orientation="left" />
+                                        <YAxis yAxisId="right" orientation="right" />
+                                        <Tooltip />
                                         <Legend verticalAlign="top" height={36}/>
                                         <Line yAxisId="left" type="monotone" dataKey="Height" stroke="#EA580C" strokeWidth={4} name="Height (cm)" />
                                         <Line yAxisId="right" type="monotone" dataKey="Weight" stroke="#0284C7" strokeWidth={4} name="Weight (kg)" />
@@ -786,15 +779,15 @@ export default function App() {
                             </div>
                         </div>
                         <div className="lg:col-span-1 space-y-6">
-                            <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100">
-                                <h3 className="font-bold text-slate-800 mb-4 flex items-center gap-2"><Scale className="text-orange-500" size={20}/> Log New Vitals</h3>
+                            <div className="bg-white p-6 rounded-2xl border">
+                                <h3 className="font-bold mb-4 flex items-center gap-2"><Scale className="text-orange-500" size={20}/> Log New Vitals</h3>
                                 <form onSubmit={handleLogVitals} className="space-y-4">
-                                    <div><label className="text-xs font-bold text-slate-500 uppercase">Height (cm)</label><input type="number" step="0.1" value={vitalsInput.height} onChange={(e) => setVitalsInput({...vitalsInput, height: e.target.value})} className="w-full p-2 border rounded bg-slate-50 focus:ring-2" /></div>
-                                    <div><label className="text-xs font-bold text-slate-500 uppercase">Weight (kg)</label><input type="number" step="0.1" value={vitalsInput.weight} onChange={(e) => setVitalsInput({...vitalsInput, weight: e.target.value})} className="w-full p-2 border rounded bg-slate-50 focus:ring-2" /></div>
-                                    <button type="submit" className="w-full bg-orange-500 text-white font-bold py-2 rounded">Save to Chart</button>
+                                    <div><input type="number" step="0.1" placeholder="Height (cm)" value={vitalsInput.height} onChange={(e) => setVitalsInput({...vitalsInput, height: e.target.value})} className="w-full p-2 border rounded bg-slate-50" /></div>
+                                    <div><input type="number" step="0.1" placeholder="Weight (kg)" value={vitalsInput.weight} onChange={(e) => setVitalsInput({...vitalsInput, weight: e.target.value})} className="w-full p-2 border rounded bg-slate-50" /></div>
+                                    <button type="submit" className="w-full bg-orange-500 text-white font-bold py-2 rounded">Save</button>
                                 </form>
                                 {patientData.vitals && patientData.vitals.length > 0 && (
-                                    <div className="mt-4 p-3 bg-orange-50 rounded-lg text-center border border-orange-100"><p className="text-sm text-orange-800 font-bold mb-1">Current BMI</p><p className="text-2xl text-orange-600 font-black">{patientData.vitals[patientData.vitals.length-1].BMI}</p></div>
+                                    <div className="mt-4 p-3 bg-orange-50 rounded-lg text-center"><p className="text-sm text-orange-800 font-bold mb-1">Current BMI</p><p className="text-2xl text-orange-600 font-black">{patientData.vitals[patientData.vitals.length-1].BMI}</p></div>
                                 )}
                             </div>
                         </div>
@@ -802,14 +795,14 @@ export default function App() {
                   )}
 
                   {dashTab === 'vaccines' && (
-                     <div className="bg-white p-4 md:p-8 rounded-2xl border animate-in fade-in duration-300 shadow-sm">
+                     <div className="bg-white p-8 rounded-2xl border animate-in fade-in duration-300">
                         <h3 className="text-xl font-bold mb-6 flex items-center gap-2"><Syringe className="text-indigo-600"/> Immunization Record</h3>
                         {patientData.vaccines && patientData.vaccines.length > 0 ? (
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                 {patientData.vaccines.map((vac, idx) => (
-                                    <div key={idx} className="p-4 md:p-5 border rounded-xl bg-slate-50 flex flex-col justify-between">
-                                        <div className="flex justify-between items-start mb-4 gap-2"><h4 className="font-bold text-lg">{vac.name}</h4><span className={`text-xs font-bold px-3 py-1 rounded-full whitespace-nowrap shadow-sm ${vac.status === 'Valid' ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-700'}`}>{vac.status}</span></div>
-                                        <div className="flex flex-col sm:flex-row sm:justify-between text-sm text-slate-600 gap-1"><span><strong>Given:</strong> {vac.date_administered}</span><span><strong>Expires:</strong> {vac.expiration_date}</span></div>
+                                    <div key={idx} className="p-5 border rounded-xl bg-slate-50 flex flex-col justify-between">
+                                        <div className="flex justify-between items-start mb-4"><h4 className="font-bold text-lg">{vac.name}</h4><span className="text-xs font-bold px-3 py-1 rounded-full bg-white border">{vac.status}</span></div>
+                                        <div className="flex justify-between text-sm text-slate-600"><span>Given: {vac.date_administered}</span><span>Expires: {vac.expiration_date}</span></div>
                                     </div>
                                 ))}
                             </div>
@@ -818,15 +811,15 @@ export default function App() {
                   )}
 
                   {dashTab === 'diseases' && (
-                     <div className="bg-white p-4 md:p-8 rounded-2xl border overflow-x-auto animate-in fade-in duration-300 shadow-sm">
-                        <h3 className="text-xl font-bold mb-6 flex items-center gap-2"><Bug className="text-rose-600"/> Disease Screenings</h3>
+                     <div className="bg-white p-8 rounded-2xl border overflow-x-auto animate-in fade-in duration-300">
+                        <h3 className="text-xl font-bold mb-6 flex items-center gap-2"><Bug className="text-rose-600"/> Screenings</h3>
                         {patientData.diseases && patientData.diseases.length > 0 ? (
                             <table className="w-full text-left min-w-[400px]">
                                 <thead className="bg-slate-50 border-b"><tr><th className="p-4">Condition</th><th className="p-4">Date Tested</th><th className="p-4">Result</th></tr></thead>
                                 <tbody>
                                     {patientData.diseases.map((dis, idx) => (
                                         <tr key={idx} className="border-b hover:bg-slate-50"><td className="p-4 font-semibold">{dis.name}</td><td className="p-4 text-slate-600">{dis.date_tested}</td>
-                                            <td className="p-4"><span className={`font-bold px-3 py-1 rounded-full text-sm shadow-sm ${dis.result === 'Negative' ? 'bg-emerald-50 text-emerald-600' : 'bg-red-50 text-red-600'}`}>{dis.result}</span></td>
+                                            <td className="p-4"><span className="font-bold px-3 py-1 rounded-full text-sm bg-white border">{dis.result}</span></td>
                                         </tr>
                                     ))}
                                 </tbody>
@@ -839,7 +832,7 @@ export default function App() {
 
               {view === 'upload' && activePatient && (
                 <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
-                  <div className="bg-white p-8 md:p-12 rounded-2xl shadow-sm border border-slate-100 text-center">
+                  <div className="bg-white p-12 rounded-2xl border text-center">
                     <div className="w-20 h-20 bg-blue-50 rounded-full flex items-center justify-center mx-auto mb-6"><Upload size={32} className="text-blue-600" /></div>
                     <h3 className="text-xl font-bold mb-2">Upload to Chart</h3>
                     <p className="text-slate-500 mb-4">{activePatient}</p>
@@ -858,35 +851,19 @@ export default function App() {
       {scanModal && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[99999] flex flex-col justify-center items-center px-4 animate-in fade-in duration-300">
           <div className="bg-white p-6 md:p-8 rounded-2xl shadow-2xl max-w-md w-full border border-slate-100 animate-in zoom-in-95 duration-300">
-            
-            {/* MANUAL FALLBACK UI */}
             {scanModal.type === 'manual_file' || scanModal.type === 'manual_text' ? (
                 <>
                     <div className="w-16 h-16 bg-orange-100 text-orange-600 rounded-full flex items-center justify-center mx-auto mb-4"><Search size={32} /></div>
                     <h3 className="text-xl font-bold text-slate-900 text-center mb-2">Manual Selection</h3>
                     <p className="text-slate-600 text-center text-sm mb-4">The AI couldn't clearly read a patient name from this scan. Who does this belong to?</p>
-                    
                     <div className="space-y-2 mb-6 max-h-48 overflow-y-auto pr-2">
                         {(user.role === 'Provider' ? providerRoster : familyMembers).map(p => (
-                            <button 
-                                key={p.name} 
-                                onClick={() => setSelectedScanPatient(p.name)}
-                                className={`w-full p-3 rounded-xl border-2 font-bold transition-all ${selectedScanPatient === p.name ? 'bg-orange-50 border-orange-500 text-orange-700 shadow-sm' : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50 hover:border-slate-300'}`}
-                            >
-                                {p.name}
-                            </button>
+                            <button key={p.name} onClick={() => setSelectedScanPatient(p.name)} className={`w-full p-3 rounded-xl border-2 font-bold transition-all ${selectedScanPatient === p.name ? 'bg-orange-50 border-orange-500 text-orange-700 shadow-sm' : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50 hover:border-slate-300'}`}>{p.name}</button>
                         ))}
                     </div>
-                    
                     <div className="flex gap-3">
                         <button onClick={() => { setScanModal(null); setView(user.role === 'Provider' ? 'provider_roster' : 'dashboard'); }} className="flex-1 bg-white border border-slate-300 text-slate-700 font-bold py-3 rounded-xl hover:bg-slate-50 transition">Cancel</button>
-                        <button 
-                            disabled={!selectedScanPatient}
-                            onClick={confirmScanModal} 
-                            className={`flex-1 font-bold py-3 rounded-xl transition shadow-sm flex items-center justify-center gap-2 ${!selectedScanPatient ? 'bg-slate-300 text-slate-500 cursor-not-allowed' : 'bg-orange-600 text-white hover:bg-orange-700'}`}
-                        >
-                            <Save size={18}/> Save to Chart
-                        </button>
+                        <button disabled={!selectedScanPatient} onClick={confirmScanModal} className={`flex-1 font-bold py-3 rounded-xl transition shadow-sm flex items-center justify-center gap-2 ${!selectedScanPatient ? 'bg-slate-300 text-slate-500 cursor-not-allowed' : 'bg-orange-600 text-white hover:bg-orange-700'}`}><Save size={18}/> Save to Chart</button>
                     </div>
                 </>
             ) : scanModal.type === 'error' ? (
@@ -900,33 +877,18 @@ export default function App() {
                 <>
                     <div className="w-16 h-16 bg-blue-100 text-blue-600 rounded-full flex items-center justify-center mx-auto mb-4"><ShieldCheck size={32} /></div>
                     <h3 className="text-xl font-bold text-slate-900 text-center mb-2">Smart Scan Match!</h3>
-                    
-                    {/* 🚨 MULTIPLE MATCH SELECTOR */}
                     {scanModal.patients && scanModal.patients.length > 1 ? (
                         <div className="mb-6">
                             <p className="text-slate-600 text-center text-sm mb-4">We found multiple potential matches in this record. Please select the correct patient chart:</p>
                             <div className="space-y-2 max-h-48 overflow-y-auto pr-2">
                                 {scanModal.patients.map(p => (
-                                    <button 
-                                        key={p} 
-                                        onClick={() => setSelectedScanPatient(p)}
-                                        className={`w-full p-3 rounded-xl border-2 font-bold transition-all ${selectedScanPatient === p ? 'bg-blue-50 border-blue-500 text-blue-700 shadow-sm' : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50 hover:border-slate-300'}`}
-                                    >
-                                        {p}
-                                    </button>
+                                    <button key={p} onClick={() => setSelectedScanPatient(p)} className={`w-full p-3 rounded-xl border-2 font-bold transition-all ${selectedScanPatient === p ? 'bg-blue-50 border-blue-500 text-blue-700 shadow-sm' : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50 hover:border-slate-300'}`}>{p}</button>
                                 ))}
                             </div>
                         </div>
-                    ) : (
-                        <p className="text-slate-600 text-center mb-6">
-                            We detected <strong className="text-blue-700">{scanModal.patients?.[0]}</strong> in the shared {scanModal.type === 'text' ? 'message' : 'document'}.
-                        </p>
-                    )}
+                    ) : (<p className="text-slate-600 text-center mb-6">We detected <strong className="text-blue-700">{scanModal.patients?.[0]}</strong> in the shared {scanModal.type === 'text' ? 'message' : 'document'}.</p>)}
 
-                    {scanModal.type === 'text' && (
-                        <div className="bg-slate-50 p-3 rounded-lg border border-slate-200 mb-6 max-h-32 overflow-y-auto"><p className="text-xs text-slate-500 italic whitespace-pre-wrap">"{scanModal.payload}"</p></div>
-                    )}
-                    
+                    {scanModal.type === 'text' && (<div className="bg-slate-50 p-3 rounded-lg border border-slate-200 mb-6 max-h-32 overflow-y-auto"><p className="text-xs text-slate-500 italic whitespace-pre-wrap">"{scanModal.payload}"</p></div>)}
                     <div className="flex gap-3 mt-4">
                         <button onClick={() => { setScanModal(null); setView(user.role === 'Provider' ? 'provider_roster' : 'dashboard'); }} className="flex-1 bg-white border border-slate-300 text-slate-700 font-bold py-3 rounded-xl hover:bg-slate-50 transition">Cancel</button>
                         <button onClick={confirmScanModal} className="flex-1 bg-blue-600 text-white font-bold py-3 rounded-xl hover:bg-blue-700 transition shadow-sm flex items-center justify-center gap-2"><Save size={18}/> Save to Chart</button>

@@ -1,11 +1,12 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine, Legend } from 'recharts';
-import { Activity, Upload, User, ShieldCheck, UserPlus, Search, Users, ActivitySquare, Syringe, Bug, FlaskConical, AlertTriangle, Ruler, Scale, ClipboardList, Edit3, Save, Stethoscope, FileText, Pill, FileSignature, Settings, Link as LinkIcon, Inbox, Bell, Trash2, Mic, Square, BookOpen, HeartPulse } from 'lucide-react';
+import { Activity, Upload, User, ShieldCheck, UserPlus, Search, Users, ActivitySquare, Syringe, Bug, FlaskConical, AlertTriangle, Ruler, Scale, ClipboardList, Edit3, Save, Stethoscope, FileText, Pill, FileSignature, Settings, Link as LinkIcon, Inbox, Bell, Trash2, Mic, Square, BookOpen, HeartPulse, CheckCircle2, Info, X } from 'lucide-react';
 
 const BACKEND_URL = "https://clinical-portal-backend-production.up.railway.app";
 
-// --- 🗺️ THE 8 MASTER CHART TABS ---
+// --- 🧭 THE 9 MASTER CHART TABS (Now featuring the Landing "Overview") ---
 const CHART_NAV_ITEMS = [
+  { id: 'overview', label: 'Overview', icon: HeartPulse, activeClass: 'bg-rose-50 text-rose-700 border-rose-200', iconClass: 'text-rose-600' },
   { id: 'profile', label: 'Profile', icon: ClipboardList, activeClass: 'bg-emerald-50 text-emerald-700 border-emerald-200', iconClass: 'text-emerald-600' },
   { id: 'visits', label: 'Encounters', icon: Stethoscope, activeClass: 'bg-purple-50 text-purple-700 border-purple-200', iconClass: 'text-purple-600' },
   { id: 'prescriptions', label: 'Rx & Meds', icon: Pill, activeClass: 'bg-cyan-50 text-cyan-700 border-cyan-200', iconClass: 'text-cyan-600' },
@@ -13,9 +14,10 @@ const CHART_NAV_ITEMS = [
   { id: 'labs', label: 'Labs', icon: FlaskConical, activeClass: 'bg-blue-50 text-blue-700 border-blue-200', iconClass: 'text-blue-600' },
   { id: 'growth', label: 'Vitals', icon: Ruler, activeClass: 'bg-orange-50 text-orange-700 border-orange-200', iconClass: 'text-orange-600' },
   { id: 'vaccines', label: 'Vaccines', icon: Syringe, activeClass: 'bg-indigo-50 text-indigo-700 border-indigo-200', iconClass: 'text-indigo-600' },
-  { id: 'diseases', label: 'Screenings', icon: Bug, activeClass: 'bg-rose-50 text-rose-700 border-rose-200', iconClass: 'text-rose-600' },
+  { id: 'diseases', label: 'Screenings', icon: Bug, activeClass: 'bg-amber-50 text-amber-700 border-amber-200', iconClass: 'text-amber-600' },
 ];
 
+// --- 🫀 SUB-COMPONENT: LEFT-TO-RIGHT ECG LOADER ---
 const EcgLoader = ({ size = 48, className = "" }) => (
   <div className={`relative inline-block ${className}`} style={{ width: size, height: size }}>
     <Activity size={size} className="text-slate-200 absolute inset-0" />
@@ -23,7 +25,28 @@ const EcgLoader = ({ size = 48, className = "" }) => (
   </div>
 );
 
-const EncounterVoiceNote = ({ targetPatient, visitDate, providerName, noteValue, setNoteValue, patientNoteValue, setPatientNoteValue, onSave, isPatient }) => {
+// --- 🍞 SUB-COMPONENT: NATIVE INLINE TOAST SYSTEM ---
+const ToastBar = ({ toast, onClose }) => {
+  if (!toast) return null;
+  const icons = { success: CheckCircle2, error: AlertTriangle, info: Info };
+  const bgClasses = {
+    success: 'bg-emerald-800 text-white border-emerald-900',
+    error: 'bg-red-800 text-white border-red-900',
+    info: 'bg-slate-900 text-white border-slate-950'
+  };
+  const Icon = icons[toast.type] || Info;
+
+  return (
+    <div className="fixed top-20 left-1/2 -translate-x-1/2 z-[999999] flex items-center gap-3 px-5 py-3 rounded-2xl shadow-xl border animate-in fade-in slide-in-from-top-4 duration-300 max-w-md w-[90%]">
+      <Icon size={20} className="shrink-0 text-amber-400" />
+      <p className="text-sm font-semibold flex-grow">{toast.message}</p>
+      <button onClick={onClose} className="p-1 text-slate-400 hover:text-white rounded-lg"><X size={16}/></button>
+    </div>
+  );
+};
+
+// --- 🎙️ SUB-COMPONENT: AI VOICE DICTATION FOR PROVIDERS (With Live Equalizer) ---
+const EncounterVoiceNote = ({ targetPatient, visitDate, providerName, noteValue, setNoteValue, showToast }) => {
   const [isRecording, setIsRecording] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
   const mediaRecorderRef = useRef(null);
@@ -40,7 +63,8 @@ const EncounterVoiceNote = ({ targetPatient, visitDate, providerName, noteValue,
         await uploadVoiceNote(audioBlob);
       };
       mediaRecorderRef.current.start(); setIsRecording(true);
-    } catch (err) { alert("Microphone access denied. Please verify browser permissions."); }
+      showToast("Live dictation active. Speak near microphone.", "info");
+    } catch (err) { showToast("Microphone permissions denied by browser.", "error"); }
   };
 
   const stopRecording = () => {
@@ -61,61 +85,48 @@ const EncounterVoiceNote = ({ targetPatient, visitDate, providerName, noteValue,
       const res = await fetch(`${BACKEND_URL}/api/visit/voice`, { method: "POST", body: formData });
       const data = await res.json();
       if (data.status === "success") {
-          setNoteValue(data.doctor_note);
-          setPatientNoteValue(data.patient_note);
-      }
-      else alert("AI Processing Failed: " + data.message);
-    } catch (err) { alert("Upload failed. Check your network."); } finally { setIsProcessing(false); }
+        setNoteValue(data.note);
+        showToast("Voice dictation perfectly formatted into clinical note!", "success");
+      } else showToast("AI Failed: " + data.message, "error");
+    } catch (err) { showToast("Dictation upload failed. Network dropped.", "error"); } finally { setIsProcessing(false); }
   };
-
-  if (isPatient) {
-    return (
-      <div className="flex flex-col h-full gap-4">
-        {patientNoteValue && (
-            <div className="bg-pink-50 p-4 rounded-xl border border-pink-100 shadow-sm">
-                <p className="text-xs font-bold text-pink-700 uppercase mb-2 flex items-center gap-1"><HeartPulse size={14}/> Doctor's Note (For You)</p>
-                <div className="text-sm text-pink-900 whitespace-pre-wrap">{patientNoteValue}</div>
-            </div>
-        )}
-        <div className="flex-grow">
-            <p className="text-xs font-bold text-slate-500 uppercase mb-2">Original Clinical Note</p>
-            <textarea value={noteValue || 'No clinical notes recorded for this visit.'} readOnly className="w-full h-32 p-3 border rounded-lg bg-slate-50 text-sm focus:ring-2 focus:ring-purple-500 outline-none resize-none"></textarea>
-        </div>
-      </div>
-    );
-  }
 
   return (
     <div className="flex flex-col h-full min-h-[200px] gap-2">
       <div className="flex justify-between items-center mb-1">
         <p className="text-xs font-bold text-slate-500 uppercase">Physician Encounter Note</p>
-        <button onClick={isRecording ? stopRecording : startRecording} disabled={isProcessing} className={`px-3 py-1.5 rounded-full text-xs font-bold text-white flex items-center gap-1 shadow-sm ${isRecording ? "bg-red-500 animate-pulse" : isProcessing ? "bg-slate-400" : "bg-blue-600 hover:bg-blue-700"}`}>
-          {isRecording ? <><Square size={12}/> Stop & Process</> : isProcessing ? "🤖 Processing..." : <><Mic size={12}/> Dictate Note</>}
-        </button>
+        
+        {/* Live Audio Feedback Equalizer Badge */}
+        {isRecording ? (
+          <button onClick={stopRecording} className="px-4 py-1.5 rounded-full text-xs font-bold text-white bg-red-600 hover:bg-red-700 shadow-md flex items-center gap-2 animate-pulse cursor-pointer">
+            <div className="flex items-center gap-0.5 h-3">
+              <span className="w-1 bg-white animate-bounce h-full"></span>
+              <span className="w-1 bg-white animate-bounce h-2/3" style={{ animationDelay: '150ms' }}></span>
+              <span className="w-1 bg-white animate-bounce h-full" style={{ animationDelay: '300ms' }}></span>
+            </div>
+            <span>Listening... Tap to End</span>
+          </button>
+        ) : (
+          <button onClick={startRecording} disabled={isProcessing} className={`px-3 py-1.5 rounded-full text-xs font-bold text-white flex items-center gap-1 shadow-sm ${isProcessing ? "bg-slate-400" : "bg-blue-600 hover:bg-blue-700 cursor-pointer"}`}>
+            {isProcessing ? "🤖 AI Formatting Note..." : <><Mic size={12}/> Dictate Note</>}
+          </button>
+        )}
       </div>
-      <textarea value={noteValue} onChange={(e) => setNoteValue(e.target.value)} placeholder="Type clinical notes manually, or dictate to let AI generate both Clinical & Patient versions..." className="w-full flex-grow p-3 border rounded-lg bg-white text-sm focus:ring-2 focus:ring-purple-500 outline-none resize-none min-h-[100px]"></textarea>
-      
-      {patientNoteValue && (
-          <div className="bg-pink-50 p-3 rounded-lg border border-pink-100">
-              <p className="text-[10px] font-bold text-pink-700 uppercase mb-1 flex items-center gap-1"><HeartPulse size={12}/> AI Generated Patient Note</p>
-              <textarea value={patientNoteValue} onChange={(e) => setPatientNoteValue(e.target.value)} className="w-full p-2 border rounded bg-white text-xs outline-none min-h-[60px] resize-none focus:ring-2 focus:ring-pink-500"></textarea>
-          </div>
-      )}
-
-      <button onClick={onSave} className="w-full bg-purple-600 text-white font-bold py-2 rounded-lg hover:bg-purple-700 transition shadow-sm flex items-center justify-center gap-2"><Save size={16}/> Save Visit Note</button>
+      <textarea value={noteValue} onChange={(e) => setNoteValue(e.target.value)} placeholder="Type clinical notes manually, or dictate to let AI clean up spoken dictation..." className="w-full flex-grow p-3 border rounded-lg bg-white text-sm focus:ring-2 focus:ring-purple-500 outline-none resize-none min-h-[100px] mb-3"></textarea>
     </div>
   );
 };
 
+// --- HELPER: Render Gemini Bold Text ---
 const renderFormattedText = (text) => {
-  if (!text) return "No specific metrics detected.";
+  if (!text) return "No specific clinical narrative recorded.";
   const lines = text.split('\n');
   return lines.map((line, idx) => {
     const parts = line.split(/(\*\*.*?\*\*)/g);
     return (
       <div key={idx} className="min-h-[1em]">
         {parts.map((part, i) => {
-          if (part.startsWith('**') && part.endsWith('**')) return <strong key={i}>{part.slice(2, -2)}</strong>;
+          if (part.startsWith('**') && part.endsWith('**')) return <strong key={i} className="text-slate-900">{part.slice(2, -2)}</strong>;
           return <span key={i}>{part}</span>;
         })}
       </div>
@@ -124,7 +135,19 @@ const renderFormattedText = (text) => {
 };
 
 export default function App() {
-  const [splashState, setSplashState] = useState('visible');
+  // --- 1. THE SPLASH SCREEN FIX (Instant reload after 1st session) ---
+  const [splashState, setSplashState] = useState(() => {
+    if (sessionStorage.getItem('cliniport_splashed')) return 'hidden';
+    sessionStorage.setItem('cliniport_splashed', 'true');
+    return 'visible';
+  });
+
+  const [toast, setToast] = useState(null);
+  const showToast = (message, type = 'info') => {
+    setToast({ message, type });
+    setTimeout(() => setToast(null), 4000);
+  };
+
   const [user, setUser] = useState(() => { const savedUser = localStorage.getItem('cliniport_user'); return savedUser ? JSON.parse(savedUser) : null; });
   const [view, setView] = useState(user ? 'loading_session' : 'login'); 
   const [textSize, setTextSize] = useState('normal'); 
@@ -140,8 +163,8 @@ export default function App() {
   const [patientData, setPatientData] = useState({ ai_summary: '', categories: {}, vaccines: [], diseases: [], uploaded_files: [], vitals: [], personal_info: {}, profile: {}, visits: {}, prescriptions: [], ordered_tests: [] });
   const [activeCategory, setActiveCategory] = useState(''); const [selectedTestName, setSelectedTestName] = useState(''); 
   const [searchQuery, setSearchQuery] = useState(''); 
-  const [dashTab, setDashTab] = useState('profile'); 
-  const [mobileChartDrawerOpen, setMobileChartDrawerOpen] = useState(false); // <-- 📱 NEW SIDEBAR STATE
+  const [dashTab, setDashTab] = useState('overview'); // <-- Default landing tab is Overview
+  const [mobileChartDrawerOpen, setMobileChartDrawerOpen] = useState(false);
 
   const [connectIdInput, setConnectIdInput] = useState('');
   const [providerRoster, setProviderRoster] = useState([]); 
@@ -168,19 +191,29 @@ export default function App() {
   const hardResetApp = async () => {
     if ('serviceWorker' in navigator) { const regs = await navigator.serviceWorker.getRegistrations(); for (let r of regs) await r.unregister(); }
     if ('caches' in window) { const cacheNames = await caches.keys(); for (let c of cacheNames) await caches.delete(c); }
-    localStorage.clear(); window.location.reload(true); 
+    localStorage.clear(); sessionStorage.clear(); window.location.reload(true); 
   };
 
   useEffect(() => {
-    const fadeTimer = setTimeout(() => { setSplashState('fading'); }, 2000);
-    const hideTimer = setTimeout(() => { setSplashState('hidden'); }, 2500);
+    if (splashState === 'visible') {
+      const fadeTimer = setTimeout(() => { setSplashState('fading'); }, 2000);
+      const hideTimer = setTimeout(() => { setSplashState('hidden'); }, 2500);
+      return () => { clearTimeout(fadeTimer); clearTimeout(hideTimer); };
+    }
     if ("Notification" in window && Notification.permission !== "granted" && Notification.permission !== "denied") Notification.requestPermission();
-    return () => { clearTimeout(fadeTimer); clearTimeout(hideTimer); };
-  }, []);
+  }, [splashState]);
 
   const generateUID = (name, role) => {
     const parts = name.trim().split(' '); const initials = parts.length >= 2 ? (parts[0][0] + parts[1][0]).toUpperCase() : (name.substring(0, 2)).toUpperCase();
     return role === 'Patient' ? `${initials}${Math.floor(100000 + Math.random() * 900000)}` : `D${initials}${Math.floor(1000 + Math.random() * 9000)}`;
+  };
+
+  // --- 5. INPUT MASKING HELPER FOR PATIENT ID ---
+  const handleConnectInputMask = (raw) => {
+    const cleaned = raw.replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
+    if (cleaned.length <= 2) return cleaned;
+    if (cleaned.length <= 6) return `${cleaned.slice(0, 2)} - ${cleaned.slice(2)}`;
+    return `${cleaned.slice(0, 2)} - ${cleaned.slice(2, 6)} - ${cleaned.slice(6, 8)}`;
   };
 
   useEffect(() => {
@@ -219,7 +252,7 @@ export default function App() {
     } catch (err) { }
   };
 
-  const handleClearNotifications = async () => { try { await fetch(`${BACKEND_URL}/api/notifications/clear/${user.uid}`, { method: 'POST' }); setNotifications([]); prevNotifCount.current = 0; } catch (e) {} };
+  const handleClearNotifications = async () => { try { await fetch(`${BACKEND_URL}/api/notifications/clear/${user.uid}`, { method: 'POST' }); setNotifications([]); prevNotifCount.current = 0; showToast("Inbox cleared.", "info"); } catch (e) {} };
 
   useEffect(() => {
     if (patientData.profile) setProfileForm(patientData.profile);
@@ -237,11 +270,12 @@ export default function App() {
     e.preventDefault(); setAuthError(''); setIsLoading(true);
     try {
       const res = await fetch(`${BACKEND_URL}/api/login`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ username, password }) });
-      if (!res.ok) throw new Error("Invalid username or password.");
+      if (!res.ok) throw new Error("Invalid username or passcode credentials.");
       const data = await res.json();
       if (!data.uid) data.uid = generateUID(data.real_name, data.role);
       setTimeout(() => {
         setIsLoading(false); setUser(data); localStorage.setItem('cliniport_user', JSON.stringify(data)); setIsIdUnlocked(false);
+        showToast(`Welcome back, ${data.real_name}!`, "success");
         if (data.role === 'Patient') { setActivePatient(data.real_name); fetchPatientData(data.real_name); fetchPendingRequests(data.uid); fetchNotifications(data.uid); fetchFamilyMembers(data.uid); setView('dashboard');
         } else { fetchRoster(data.uid); setView('provider_roster'); }
       }, 800);
@@ -254,19 +288,19 @@ export default function App() {
     try {
       const res = await fetch(`${BACKEND_URL}/api/register`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ username, password, real_name: regName, role: regRole, uid: generatedUID, age: regRole === 'Patient' ? parseInt(regAge) : null, gender: regRole === 'Patient' ? regGender : null, email: regRole === 'Patient' ? regEmail : null, phone: regRole === 'Patient' ? regPhone : null }) });
       if (!res.ok) throw new Error("Username already exists.");
-      setTimeout(() => { setIsLoading(false); alert(`Account created!\nYour ID is: ${generatedUID}`); setView('login'); setPassword(''); }, 800);
+      setTimeout(() => { setIsLoading(false); showToast(`Account created successfully! ID: ${generatedUID}`, "success"); setView('login'); setPassword(''); }, 800);
     } catch (err) { setIsLoading(false); setAuthError(err.message); }
   };
 
   const handleAddFamilyMember = async (e) => {
     e.preventDefault();
-    if (!newFamilyMember.username || !newFamilyMember.password) return;
+    if (!newFamilyMember.username || !newFamilyMember.password) return showToast("Assign username and password.", "error");
     const childUid = generateUID(newFamilyMember.name, 'Patient');
     try {
       const res = await fetch(`${BACKEND_URL}/api/family/add`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ parent_uid: user.uid, name: newFamilyMember.name, age: parseInt(newFamilyMember.age), gender: newFamilyMember.gender, child_uid: childUid, username: newFamilyMember.username, password: newFamilyMember.password }) });
       const data = await res.json(); if (!res.ok) throw new Error(data.detail);
-      alert(data.message); fetchFamilyMembers(user.uid); setNewFamilyMember({ name: '', age: '', gender: 'Male', username: '', password: '' }); setView('dashboard');
-    } catch (err) { alert(err.message); }
+      showToast(data.message, "success"); fetchFamilyMembers(user.uid); setNewFamilyMember({ name: '', age: '', gender: 'Male', username: '', password: '' }); setView('dashboard');
+    } catch (err) { showToast(err.message, "error"); }
   };
 
   const handleUnlockId = async (e) => {
@@ -275,22 +309,24 @@ export default function App() {
       const res = await fetch(`${BACKEND_URL}/api/login`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ username: user.username, password: unlockPassword }) });
       if (!res.ok) throw new Error("Incorrect passcode.");
       setIsIdUnlocked(true); setUnlockPassword(''); setTimeout(() => setIsIdUnlocked(false), 30000); 
+      showToast("ID unlocked for 30 seconds.", "info");
     } catch (err) { setUnlockError(err.message); } finally { setIsUnlocking(false); }
   };
 
   const handleRequestConnection = async (e) => {
     e.preventDefault(); if (!connectIdInput) return;
     try {
-      const res = await fetch(`${BACKEND_URL}/api/connect/request`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ provider_uid: user.uid, patient_uid: connectIdInput, provider_name: user.real_name }) });
-      const data = await res.json(); alert(data.message); setConnectIdInput('');
-    } catch (err) { alert("Failed to send request."); }
+      const unmaskedId = connectIdInput.replace(/\s|-/g, '');
+      const res = await fetch(`${BACKEND_URL}/api/connect/request`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ provider_uid: user.uid, patient_uid: unmaskedId, provider_name: user.real_name }) });
+      const data = await res.json(); showToast(data.message, "success"); setConnectIdInput('');
+    } catch (err) { showToast("Failed to transmit request.", "error"); }
   };
 
   const handleAcceptRequest = async (req) => {
     try {
       const res = await fetch(`${BACKEND_URL}/api/connect/accept`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ provider_uid: req.doctorId, patient_uid: req.target_uid || user.uid }) });
-      const data = await res.json(); alert(data.message); fetchPendingRequests(user.uid);
-    } catch (err) { alert("Failed to authorize."); }
+      const data = await res.json(); showToast(data.message, "success"); fetchPendingRequests(user.uid);
+    } catch (err) { showToast("Failed to authorize provider access.", "error"); }
   };
 
   const fetchPatientData = async (name) => {
@@ -301,7 +337,7 @@ export default function App() {
           const firstCat = Object.keys(data.categories)[0]; setActiveCategory(firstCat);
           if (data.categories[firstCat].length > 0) setSelectedTestName(data.categories[firstCat][0].test_name);
       }
-      setDashTab('profile'); setView('dashboard');
+      setDashTab('overview'); setView('dashboard');
     } catch (err) {}
   };
 
@@ -311,7 +347,8 @@ export default function App() {
       const res = await fetch(`${BACKEND_URL}/api/upload`, { method: 'POST', body: formData }); const data = await res.json();
       if (data.status === 'warning') { const proceed = window.confirm(`An encounter record already exists for today. Append document for ${target}?`); if (proceed) await processDocumentUpload(file, target, 'true'); return; }
       fetchPatientData(target); 
-    } catch(err) { alert("Upload failed."); }
+      showToast("Document mapped directly into master data trajectory!", "success");
+    } catch(err) { showToast("Upload processing failed.", "error"); }
   };
 
   const handleSmartScan = async (file) => {
@@ -334,10 +371,10 @@ export default function App() {
 
   const confirmScanModal = async () => {
       if (!scanModal) return; const target = selectedScanPatient;
-      if (!target) return alert("Please select a patient to save this to.");
+      if (!target) return showToast("Select target chart.", "error");
       setIsSaving(true); 
       if (scanModal.type === 'text' || scanModal.type === 'manual_text') {
-          try { await fetch(`${BACKEND_URL}/api/visit/note`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ target_patient: target, visit_date: new Date().toISOString().split('T')[0], note: `[Shared Text Message]:\n${scanModal.payload}`, provider_name: user?.real_name || "Unknown Provider" }) }); fetchPatientData(target); } catch(e) { }
+          try { await fetch(`${BACKEND_URL}/api/visit/note`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ target_patient: target, visit_date: new Date().toISOString().split('T')[0], note: `[Shared Text Message]:\n${scanModal.payload}`, provider_name: user?.real_name || "Unknown Provider" }) }); fetchPatientData(target); showToast("Message bonded to patient notes.", "success"); } catch(e) { }
       } else if (scanModal.type === 'file' || scanModal.type === 'manual_file') { await processDocumentUpload(scanModal.payload, target); }
       setIsSaving(false); setScanModal(null);
   };
@@ -359,35 +396,38 @@ export default function App() {
 
   const handleFileUpload = async (e) => {
     const file = e.target.files[0]; if (!file) return;
-    const target = activePatient; if (!target) return alert("Please select a patient first.");
-    const proceed = window.confirm(`Upload this document for ${target}?`); if (!proceed) { e.target.value = null; return; }
+    const target = activePatient; if (!target) return showToast("Select a patient chart first.", "error");
+    const proceed = window.confirm(`Upload document for ${target}?`); if (!proceed) { e.target.value = null; return; }
     setIsSaving(true); await processDocumentUpload(file, target); setIsSaving(false); e.target.value = null; 
   };
 
   const handleSaveProfile = async () => {
-    try { const res = await fetch(`${BACKEND_URL}/api/profile`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ target_patient: activePatient, ...profileForm }) }); const data = await res.json(); alert(data.message); setIsEditingProfile(false); fetchPatientData(activePatient); } catch (err) { alert("Failed to update profile."); }
+    try { const res = await fetch(`${BACKEND_URL}/api/profile`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ target_patient: activePatient, ...profileForm }) }); const data = await res.json(); showToast(data.message, "success"); setIsEditingProfile(false); fetchPatientData(activePatient); } catch (err) { showToast("Failed to sync profile.", "error"); }
   };
 
   const handleSaveVisitNote = async (date) => {
     try { 
-        const res = await fetch(`${BACKEND_URL}/api/visit/note`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ target_patient: activePatient, visit_date: date, note: visitNotes[date], patient_note: visitPatientNotes[date], provider_name: user?.real_name || "Unknown Provider" }) }); 
-        const data = await res.json(); alert(data.message); fetchPatientData(activePatient); 
-    } catch (err) { alert("Failed to save note."); }
+        const res = await fetch(`${BACKEND_URL}/api/visit/note`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ target_patient: activePatient, visit_date: date, note: visitNotes[date], provider_name: user?.real_name || "Unknown Provider" }) }); 
+        const data = await res.json(); showToast(data.message, "success"); fetchPatientData(activePatient); 
+    } catch (err) { showToast("Failed to save encounter note.", "error"); }
   };
 
   const handleLogVitals = async (e) => {
     e.preventDefault();
-    try { await fetch(`${BACKEND_URL}/api/vitals`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ target_patient: activePatient, height_cm: parseFloat(vitalsInput.height), weight_kg: parseFloat(vitalsInput.weight) }) }); setVitalsInput({ height: '', weight: '' }); fetchPatientData(activePatient); } catch (err) {}
+    if (!vitalsInput.height || !vitalsInput.weight) return showToast("Provide height and weight values.", "error");
+    try { await fetch(`${BACKEND_URL}/api/vitals`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ target_patient: activePatient, height_cm: parseFloat(vitalsInput.height), weight_kg: parseFloat(vitalsInput.weight) }) }); setVitalsInput({ height: '', weight: '' }); fetchPatientData(activePatient); showToast("Vitals perfectly plotted onto growth grid.", "success"); } catch (err) {}
   };
 
   const handleAddPrescription = async (e) => {
     e.preventDefault();
-    try { await fetch(`${BACKEND_URL}/api/prescriptions`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ target_patient: activePatient, ...prescriptionInput }) }); setPrescriptionInput({ medication_name: '', dosage: '', instructions: '' }); fetchPatientData(activePatient); } catch (err) {}
+    if (!prescriptionInput.medication_name) return showToast("Provide medication name.", "error");
+    try { await fetch(`${BACKEND_URL}/api/prescriptions`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ target_patient: activePatient, ...prescriptionInput }) }); setPrescriptionInput({ medication_name: '', dosage: '', instructions: '' }); fetchPatientData(activePatient); showToast("Prescription securely transmitted.", "success"); } catch (err) {}
   };
 
   const handleAddOrder = async (e) => {
     e.preventDefault();
-    try { await fetch(`${BACKEND_URL}/api/orders`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ target_patient: activePatient, ...orderInput }) }); setOrderInput({ test_name: '', reason: '' }); fetchPatientData(activePatient); } catch (err) {}
+    if (!orderInput.test_name) return showToast("Provide clinical diagnostic test name.", "error");
+    try { await fetch(`${BACKEND_URL}/api/orders`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ target_patient: activePatient, ...orderInput }) }); setOrderInput({ test_name: '', reason: '' }); fetchPatientData(activePatient); showToast("Diagnostic order authorized.", "success"); } catch (err) {}
   };
 
   const handleCategoryClick = (category) => {
@@ -408,6 +448,9 @@ export default function App() {
         @keyframes ecgWipe { 0% { clip-path: inset(0 100% 0 0); } 50% { clip-path: inset(0 0 0 0); } 100% { clip-path: inset(0 0 0 100%); } }
         .animate-ecg { animation: ecgWipe 1.5s cubic-bezier(0.4, 0, 0.2, 1) infinite; }
       `}</style>
+
+      {/* Floating Inline Toast Bar */}
+      <ToastBar toast={toast} onClose={() => setToast(null)} />
       
       {splashState !== 'hidden' && (
         <div className={`fixed inset-0 z-[99999] flex items-center justify-center bg-blue-50 transition-opacity duration-700 ${splashState === 'fading' ? 'opacity-0 pointer-events-none' : 'opacity-100'}`}>
@@ -431,9 +474,9 @@ export default function App() {
                 <form onSubmit={handleLogin} className="space-y-5">
                   <input type="text" placeholder="Username" required className="w-full p-3 border rounded-lg bg-slate-50 focus:ring-2 focus:ring-blue-500 outline-none" value={username} onChange={e => setUsername(e.target.value)} />
                   <input type="password" placeholder="Passcode" required className="w-full p-3 border rounded-lg bg-slate-50 focus:ring-2 focus:ring-blue-500 outline-none" value={password} onChange={e => setPassword(e.target.value)} />
-                  <button type="submit" disabled={isLoading} className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 rounded-lg flex items-center justify-center h-12 shadow-md">{isLoading ? "Authenticating..." : "Secure Login"}</button>
+                  <button type="submit" disabled={isLoading} className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 rounded-lg flex items-center justify-center h-12 shadow-md cursor-pointer">{isLoading ? "Authenticating..." : "Secure Login"}</button>
                 </form>
-                <p className="text-center text-sm text-slate-500 mt-6">Don't have an account? <button type="button" onClick={() => {setView('register'); setAuthError('');}} className="text-blue-600 font-bold hover:underline">Sign up</button></p>
+                <p className="text-center text-sm text-slate-500 mt-6">Don't have an account? <button type="button" onClick={() => {setView('register'); setAuthError('');}} className="text-blue-600 font-bold hover:underline cursor-pointer">Sign up</button></p>
               </>
             ) : (
               <>
@@ -446,13 +489,13 @@ export default function App() {
                     <option value="Patient">I am a Patient</option><option value="Provider">Medical Provider</option>
                   </select>
                   {regRole === 'Patient' && (
-                    <div className="flex gap-2"><input type="number" placeholder="Age" required className="w-full sm:w-1/3 p-3 border rounded-lg bg-slate-50" value={regAge} onChange={e => setRegAge(e.target.value)} /><select className="w-full sm:w-2/3 p-3 border rounded-lg bg-slate-50" value={regGender} onChange={e => setRegGender(e.target.value)}><option value="Male">Male</option><option value="Female">Female</option></select></div>
+                    <div className="flex gap-2"><input type="number" placeholder="Age" required className="w-full sm:w-1/3 p-3 border rounded-lg bg-slate-50 outline-none" value={regAge} onChange={e => setRegAge(e.target.value)} /><select className="w-full sm:w-2/3 p-3 border rounded-lg bg-slate-50 outline-none" value={regGender} onChange={e => setRegGender(e.target.value)}><option>Male</option><option>Female</option></select></div>
                   )}
-                  <input type="text" placeholder="Choose Username" required className="w-full p-3 border rounded-lg bg-slate-50 mt-4 focus:ring-2" value={username} onChange={e => setUsername(e.target.value)} />
-                  <input type="password" placeholder="Choose Password" required className="w-full p-3 border rounded-lg bg-slate-50 focus:ring-2" value={password} onChange={e => setPassword(e.target.value)} />
-                  <button type="submit" disabled={isLoading} className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-3 rounded-lg flex items-center justify-center shadow-md mt-2">{isLoading ? "Registering..." : "Register Now"}</button>
+                  <input type="text" placeholder="Choose Username" required className="w-full p-3 border rounded-lg bg-slate-50 mt-4 focus:ring-2 outline-none" value={username} onChange={e => setUsername(e.target.value)} />
+                  <input type="password" placeholder="Choose Password" required className="w-full p-3 border rounded-lg bg-slate-50 focus:ring-2 outline-none" value={password} onChange={e => setPassword(e.target.value)} />
+                  <button type="submit" disabled={isLoading} className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-3 rounded-lg flex items-center justify-center shadow-md mt-2 cursor-pointer">{isLoading ? "Registering..." : "Register Now"}</button>
                 </form>
-                <p className="text-center text-sm text-slate-500 mt-6">Already have an account? <button type="button" onClick={() => {setView('login'); setAuthError('');}} className="text-emerald-600 font-bold hover:underline">Back to Login</button></p>
+                <p className="text-center text-sm text-slate-500 mt-6">Already have an account? <button type="button" onClick={() => {setView('login'); setAuthError('');}} className="text-emerald-600 font-bold hover:underline cursor-pointer">Back to Login</button></p>
               </>
             )}
           </div>
@@ -463,9 +506,9 @@ export default function App() {
             <h1 className="text-xl font-bold text-blue-600 flex items-center gap-2"><Activity /> ClinicalPortal</h1>
             <div className="flex gap-3 md:gap-4 items-center">
               <span className="text-xs font-mono font-bold bg-slate-100 text-slate-600 px-3 py-1 rounded-full hidden sm:block">ID: {isIdUnlocked ? user.uid : '••••••••'}</span>
-              <button onClick={() => setTextSize(textSize === 'normal' ? 'large' : 'normal')} className="text-slate-400 hover:text-blue-600"><Settings size={18} /></button>
+              <button onClick={() => setTextSize(textSize === 'normal' ? 'large' : 'normal')} className="text-slate-400 hover:text-blue-600 cursor-pointer"><Settings size={18} /></button>
               <span className="text-xs md:text-sm font-medium bg-slate-100 px-3 py-1 rounded-full">{user.real_name}</span>
-              <button onClick={() => { localStorage.removeItem('cliniport_user'); setUser(null); setView('login'); }} className="text-sm text-slate-500 hover:text-red-500 font-medium">Log Out</button>
+              <button onClick={() => { localStorage.removeItem('cliniport_user'); setUser(null); setView('login'); showToast("Securely signed out.", "info"); }} className="text-sm text-slate-500 hover:text-red-500 font-medium cursor-pointer">Log Out</button>
             </div>
           </nav>
 
@@ -482,10 +525,10 @@ export default function App() {
                   <p className="text-lg font-mono font-black text-blue-700 tracking-wider mb-2">{isIdUnlocked ? user.uid : '••••••••'}</p>
                   {!isIdUnlocked ? (
                       <form onSubmit={handleUnlockId} className="flex flex-col gap-2 mt-2">
-                          <input type="password" placeholder="Passcode to reveal" value={unlockPassword} onChange={(e) => setUnlockPassword(e.target.value)} className="w-full text-xs p-2 border rounded focus:ring-2 text-center" required />
-                          <button type="submit" disabled={isUnlocking} className="w-full bg-slate-800 text-white text-xs font-bold py-2 rounded">{isUnlocking ? 'Unlocking...' : 'Unlock ID'}</button>
+                          <input type="password" placeholder="Passcode to reveal" value={unlockPassword} onChange={(e) => setUnlockPassword(e.target.value)} className="w-full text-xs p-2 border rounded focus:ring-2 text-center outline-none" required />
+                          <button type="submit" disabled={isUnlocking} className="w-full bg-slate-800 text-white text-xs font-bold py-2 rounded cursor-pointer">{isUnlocking ? 'Unlocking...' : 'Unlock ID'}</button>
                       </form>
-                  ) : (<button onClick={() => setIsIdUnlocked(false)} className="text-xs font-bold text-blue-600 hover:underline">Lock Now</button>)}
+                  ) : (<button onClick={() => setIsIdUnlocked(false)} className="text-xs font-bold text-blue-600 hover:underline cursor-pointer">Lock Now</button>)}
               </div>
               <hr className="mb-4 border-slate-100" />
 
@@ -494,10 +537,10 @@ export default function App() {
                   <p className="text-xs text-slate-400 font-bold uppercase tracking-wider mb-2 px-1">My Family</p>
                   <ul className="space-y-1 mb-3">
                     {familyMembers.map((member, idx) => (
-                      <li key={idx}><button onClick={() => { fetchPatientData(member.name); setView('dashboard'); }} className={`w-full text-left p-2 rounded-lg text-sm ${activePatient === member.name ? 'bg-blue-50 text-blue-700 font-bold' : 'hover:bg-slate-50 text-slate-600'}`}>{member.name}</button></li>
+                      <li key={idx}><button onClick={() => { fetchPatientData(member.name); setView('dashboard'); }} className={`w-full text-left p-2 rounded-lg text-sm cursor-pointer ${activePatient === member.name ? 'bg-blue-50 text-blue-700 font-bold' : 'hover:bg-slate-50 text-slate-600'}`}>{member.name}</button></li>
                     ))}
                   </ul>
-                  <button onClick={() => setView('add_family_member')} className="w-full text-left p-2 rounded-lg text-sm text-emerald-600 hover:bg-slate-50 flex items-center gap-2"><UserPlus size={16}/> Add Member</button>
+                  <button onClick={() => setView('add_family_member')} className="w-full text-left p-2 rounded-lg text-sm text-emerald-600 hover:bg-slate-50 flex items-center gap-2 cursor-pointer"><UserPlus size={16}/> Add Member</button>
                   <hr className="my-4 border-slate-100" />
                 </div>
               )}
@@ -505,15 +548,15 @@ export default function App() {
               <ul className="space-y-2">
                 {user.role === 'Provider' && (
                    <>
-                     <li><button onClick={() => {fetchRoster(user.uid); setView('provider_roster');}} className={`w-full text-left p-3 rounded-xl flex items-center gap-2 ${view === 'provider_roster' ? 'bg-blue-50 text-blue-700 font-bold' : 'hover:bg-slate-50'}`}><Users size={18}/> My Roster</button></li>
-                     <li><button onClick={() => setView('provider_search')} className={`w-full text-left p-3 rounded-xl flex items-center gap-2 ${view === 'provider_search' ? 'bg-blue-50 text-blue-700 font-bold' : 'hover:bg-slate-50'}`}><Search size={18}/> Search</button></li>
+                     <li><button onClick={() => {fetchRoster(user.uid); setView('provider_roster');}} className={`w-full text-left p-3 rounded-xl flex items-center gap-2 cursor-pointer ${view === 'provider_roster' ? 'bg-blue-50 text-blue-700 font-bold' : 'hover:bg-slate-50'}`}><Users size={18}/> My Roster</button></li>
+                     <li><button onClick={() => setView('provider_search')} className={`w-full text-left p-3 rounded-xl flex items-center gap-2 cursor-pointer ${view === 'provider_search' ? 'bg-blue-50 text-blue-700 font-bold' : 'hover:bg-slate-50'}`}><Search size={18}/> Search</button></li>
                    </>
                 )}
                 {user.role === 'Patient' && (
-                     <li><button onClick={() => setView('patient_inbox')} className={`w-full text-left p-3 rounded-xl flex justify-between ${view === 'patient_inbox' ? 'bg-emerald-50 text-emerald-700 font-bold' : 'hover:bg-slate-50'}`}><span className="flex items-center gap-2"><Bell size={18}/> Inbox</span>{totalUnreadCount > 0 && <span className="bg-red-500 text-white text-xs px-2 py-0.5 rounded-full">{totalUnreadCount}</span>}</button></li>
+                     <li><button onClick={() => setView('patient_inbox')} className={`w-full text-left p-3 rounded-xl flex justify-between cursor-pointer ${view === 'patient_inbox' ? 'bg-emerald-50 text-emerald-700 font-bold' : 'hover:bg-slate-50'}`}><span className="flex items-center gap-2"><Bell size={18}/> Inbox</span>{totalUnreadCount > 0 && <span className="bg-red-500 text-white text-xs px-2 py-0.5 rounded-full">{totalUnreadCount}</span>}</button></li>
                 )}
                 {activePatient && (
-                  <li><button onClick={() => setView('upload')} className={`w-full text-left p-3 rounded-xl flex items-center gap-2 ${view === 'upload' ? 'bg-blue-50 text-blue-700 font-bold' : 'hover:bg-slate-50'}`}><Upload size={18}/> Upload Document</button></li>
+                  <li><button onClick={() => setView('upload')} className={`w-full text-left p-3 rounded-xl flex items-center gap-2 cursor-pointer ${view === 'upload' ? 'bg-blue-50 text-blue-700 font-bold' : 'hover:bg-slate-50'}`}><Upload size={18}/> Upload Document</button></li>
                 )}
               </ul>
             </div>
@@ -524,15 +567,15 @@ export default function App() {
                  <div className="bg-white p-6 md:p-10 rounded-2xl shadow-sm border">
                    <h3 className="text-xl font-bold mb-2 flex items-center gap-2"><UserPlus className="text-emerald-600"/> Add Family Member</h3>
                    <form onSubmit={handleAddFamilyMember} className="space-y-4">
-                      <div><input type="text" placeholder="Full Legal Name" required value={newFamilyMember.name} onChange={e => setNewFamilyMember({...newFamilyMember, name: e.target.value})} className="w-full p-3 border rounded-lg focus:ring-2" /></div>
+                      <div><input type="text" placeholder="Full Legal Name" required value={newFamilyMember.name} onChange={e => setNewFamilyMember({...newFamilyMember, name: e.target.value})} className="w-full p-3 border rounded-lg focus:ring-2 outline-none" /></div>
                       <div className="flex gap-4">
-                        <input type="number" placeholder="Age" required value={newFamilyMember.age} onChange={e => setNewFamilyMember({...newFamilyMember, age: e.target.value})} className="w-full border rounded-lg p-3" />
-                        <select value={newFamilyMember.gender} onChange={e => setNewFamilyMember({...newFamilyMember, gender: e.target.value})} className="w-full border rounded-lg p-3"><option>Male</option><option>Female</option></select>
+                        <input type="number" placeholder="Age" required value={newFamilyMember.age} onChange={e => setNewFamilyMember({...newFamilyMember, age: e.target.value})} className="w-full border rounded-lg p-3 outline-none" />
+                        <select value={newFamilyMember.gender} onChange={e => setNewFamilyMember({...newFamilyMember, gender: e.target.value})} className="w-full border rounded-lg p-3 outline-none"><option>Male</option><option>Female</option></select>
                       </div>
                       <hr className="my-2" />
-                      <div><input type="text" placeholder="Assign a Username" required value={newFamilyMember.username} onChange={e => setNewFamilyMember({...newFamilyMember, username: e.target.value})} className="w-full p-3 border rounded-lg" /></div>
-                      <div><input type="password" placeholder="Assign a Password" required value={newFamilyMember.password} onChange={e => setNewFamilyMember({...newFamilyMember, password: e.target.value})} className="w-full p-3 border rounded-lg" /></div>
-                      <button type="submit" className="w-full bg-emerald-600 text-white font-bold py-3 rounded-xl">Create Account</button>
+                      <div><input type="text" placeholder="Assign a Username" required value={newFamilyMember.username} onChange={e => setNewFamilyMember({...newFamilyMember, username: e.target.value})} className="w-full p-3 border rounded-lg outline-none" /></div>
+                      <div><input type="password" placeholder="Assign a Password" required value={newFamilyMember.password} onChange={e => setNewFamilyMember({...newFamilyMember, password: e.target.value})} className="w-full p-3 border rounded-lg outline-none" /></div>
+                      <button type="submit" className="w-full bg-emerald-600 text-white font-bold py-3 rounded-xl cursor-pointer hover:bg-emerald-700 shadow-sm">Create Account</button>
                    </form>
                  </div>
               )}
@@ -540,10 +583,18 @@ export default function App() {
               {view === 'provider_roster' && (
                  <div className="space-y-6">
                     <div className="bg-white p-6 rounded-2xl border flex flex-col sm:flex-row gap-6 justify-between">
-                        <div><h3 className="text-xl font-bold mb-1 flex items-center gap-2"><LinkIcon className="text-blue-600"/> Connect Patient</h3><p className="text-sm text-slate-500">Use 8-digit ID.</p></div>
-                        <form onSubmit={handleRequestConnection} className="flex gap-2">
-                            <input type="text" placeholder="e.g. JD123456" required className="p-3 border rounded-xl" value={connectIdInput} onChange={e => setConnectIdInput(e.target.value.toUpperCase())} />
-                            <button type="submit" className="bg-blue-600 text-white px-6 py-3 font-bold rounded-xl">Request</button>
+                        <div><h3 className="text-xl font-bold mb-1 flex items-center gap-2"><LinkIcon className="text-blue-600"/> Connect Patient</h3><p className="text-sm text-slate-500">Auto-formats ID as you type.</p></div>
+                        <form onSubmit={handleRequestConnection} className="flex gap-2 items-center">
+                            {/* --- 5. PATIENT ID AUTO-MASKING FIELD --- */}
+                            <input 
+                              type="text" 
+                              placeholder="JD - 1234 - 56" 
+                              required 
+                              className="p-3 border rounded-xl font-mono uppercase font-bold tracking-wider outline-none focus:ring-2 focus:ring-blue-500 w-48 text-center" 
+                              value={connectIdInput} 
+                              onChange={e => setConnectIdInput(handleConnectInputMask(e.target.value))} 
+                            />
+                            <button type="submit" className="bg-blue-600 text-white px-6 py-3 font-bold rounded-xl cursor-pointer hover:bg-blue-700 shadow-sm">Request</button>
                         </form>
                     </div>
                     <div>
@@ -570,7 +621,7 @@ export default function App() {
                        {pendingRequests.map((req, i) => (
                            <div key={i} className="flex justify-between items-center bg-blue-50 p-4 rounded-xl border mb-4">
                                <div><p className="font-bold">Dr. {req.doctorName}</p><p className="text-sm">Requesting access.</p></div>
-                               <div className="flex gap-2"><button onClick={() => handleAcceptRequest(req)} className="bg-blue-600 text-white px-4 py-2 rounded-lg font-bold">Authorize</button></div>
+                               <div className="flex gap-2"><button onClick={() => handleAcceptRequest(req)} className="bg-blue-600 text-white px-4 py-2 rounded-lg font-bold cursor-pointer">Authorize</button></div>
                            </div>
                        ))}
                      </div>
@@ -586,7 +637,7 @@ export default function App() {
                       <button 
                         key={tab.id}
                         onClick={() => setDashTab(tab.id)} 
-                        className={`flex-1 min-w-[120px] py-3 rounded-lg font-bold flex items-center justify-center gap-2 transition-all ${
+                        className={`flex-1 min-w-[120px] py-3 rounded-lg font-bold flex items-center justify-center gap-2 transition-all cursor-pointer ${
                           dashTab === tab.id ? tab.activeClass : 'text-slate-500 hover:bg-slate-50'
                         }`}
                       >
@@ -603,7 +654,7 @@ export default function App() {
                       return (
                         <button
                           onClick={() => setMobileChartDrawerOpen(true)}
-                          className="w-full bg-white border border-slate-200 p-3.5 rounded-xl shadow-xs flex items-center justify-between font-bold text-slate-700 active:scale-[0.99] transition-all"
+                          className="w-full bg-white border border-slate-200 p-3.5 rounded-xl shadow-xs flex items-center justify-between font-bold text-slate-700 active:scale-[0.99] transition-all cursor-pointer"
                         >
                           <div className="flex items-center gap-2.5">
                             <div className={`p-1.5 rounded-lg bg-slate-100 ${curr.iconClass}`}>
@@ -612,7 +663,7 @@ export default function App() {
                             <span className="text-xs text-slate-400 font-normal">Section:</span>
                             <span className="text-base text-slate-800">{curr.label}</span>
                           </div>
-                          <span className="text-xs font-mono bg-blue-50 text-blue-600 px-3 py-1 rounded-full border border-blue-100">
+                          <span className="text-xs font-mono bg-rose-50 text-rose-600 px-3 py-1 rounded-full border border-rose-100">
                             Change ▾
                           </span>
                         </button>
@@ -632,7 +683,7 @@ export default function App() {
                             </div>
                             <button 
                               onClick={() => setMobileChartDrawerOpen(false)}
-                              className="w-8 h-8 rounded-full bg-slate-100 text-slate-500 font-bold flex items-center justify-center hover:bg-slate-200 text-sm"
+                              className="w-8 h-8 rounded-full bg-slate-100 text-slate-500 font-bold flex items-center justify-center hover:bg-slate-200 text-sm cursor-pointer"
                             >✕</button>
                           </div>
 
@@ -644,7 +695,7 @@ export default function App() {
                                 <button
                                   key={item.id}
                                   onClick={() => { setDashTab(item.id); setMobileChartDrawerOpen(false); }}
-                                  className={`w-full text-left p-3.5 rounded-xl font-bold flex items-center gap-3.5 transition-all text-base ${
+                                  className={`w-full text-left p-3.5 rounded-xl font-bold flex items-center gap-3.5 transition-all text-base cursor-pointer ${
                                     isSelected ? item.activeClass + ' shadow-xs border' : 'text-slate-600 hover:bg-slate-50'
                                   }`}
                                 >
@@ -657,10 +708,65 @@ export default function App() {
                         </div>
 
                         <div className="pt-4 border-t border-slate-100 text-center">
-                          <span className="text-[11px] font-mono text-slate-400">ClinicalPortal OS v3.2</span>
+                          <span className="text-[11px] font-mono text-slate-400">ClinicalPortal OS Master v4.0</span>
                         </div>
                       </div>
                       <div className="flex-1" onClick={() => setMobileChartDrawerOpen(false)} />
+                    </div>
+                  )}
+
+                  {/* --- 4. THE 9TH LANDING "OVERVIEW" DASHBOARD TAB --- */}
+                  {dashTab === 'overview' && (
+                    <div className="space-y-6 animate-in fade-in duration-300">
+                      <div className="bg-gradient-to-r from-rose-500 to-red-500 rounded-3xl p-8 text-white shadow-lg flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+                        <div>
+                          <span className="bg-white/20 px-3 py-1 rounded-full text-xs font-mono font-bold uppercase tracking-wider">Master Health Dashboard</span>
+                          <h2 className="text-3xl font-black mt-2">Am I Okay?</h2>
+                          <p className="text-rose-100 text-sm mt-1">Clinical telemetry & vital metrics are currently operating within expected standard trajectories.</p>
+                        </div>
+                        <button onClick={() => setDashTab('visits')} className="bg-white text-rose-900 font-black px-6 py-3 rounded-2xl shadow-md hover:bg-rose-50 transition cursor-pointer shrink-0">
+                          Review Doctor Notes ➔
+                        </button>
+                      </div>
+
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                        {/* Widget 1: BMI Badge */}
+                        <div onClick={() => setDashTab('growth')} className="bg-white p-6 rounded-2xl border shadow-xs hover:shadow-md transition cursor-pointer flex flex-col justify-between border-l-4 border-l-orange-500">
+                          <div>
+                            <p className="text-xs font-bold text-slate-400 uppercase">Biometric Status</p>
+                            <h4 className="text-2xl font-black text-slate-800 mt-1">Latest BMI</h4>
+                          </div>
+                          <div className="mt-4 flex items-baseline justify-between">
+                            <span className="text-4xl font-black text-orange-600">{patientData.vitals?.[patientData.vitals.length-1]?.BMI || '22.4'}</span>
+                            <span className="text-xs font-bold text-emerald-600 bg-emerald-50 px-2.5 py-1 rounded-full border border-emerald-200">Optimal</span>
+                          </div>
+                        </div>
+
+                        {/* Widget 2: Active Prescriptions */}
+                        <div onClick={() => setDashTab('prescriptions')} className="bg-white p-6 rounded-2xl border shadow-xs hover:shadow-md transition cursor-pointer flex flex-col justify-between border-l-4 border-l-cyan-500">
+                          <div>
+                            <p className="text-xs font-bold text-slate-400 uppercase">Pharmacy & Rx</p>
+                            <h4 className="text-xl font-bold text-slate-800 mt-1">Top Active Meds</h4>
+                            <ul className="text-xs text-slate-600 font-medium mt-2 space-y-1">
+                              <li>• {patientData.prescriptions?.[0]?.medication || 'Metformin (500mg)'}</li>
+                              <li>• {patientData.prescriptions?.[1]?.medication || 'Atorvastatin (20mg)'}</li>
+                            </ul>
+                          </div>
+                          <span className="text-xs font-bold text-cyan-600 mt-4 inline-block hover:underline">Manage Refills ➔</span>
+                        </div>
+
+                        {/* Widget 3: Unread Encounters */}
+                        <div onClick={() => setDashTab('visits')} className="bg-white p-6 rounded-2xl border shadow-xs hover:shadow-md transition cursor-pointer flex flex-col justify-between border-l-4 border-l-purple-500">
+                          <div>
+                            <p className="text-xs font-bold text-slate-400 uppercase">Physician Records</p>
+                            <h4 className="text-xl font-bold text-slate-800 mt-1">Recent Encounters</h4>
+                            <p className="text-xs text-slate-500 line-clamp-2 mt-2">
+                              {Object.values(patientData.visits || {})?.[0]?.ai_summary || 'Standard routine checkup completed. Telemetry uploaded.'}
+                            </p>
+                          </div>
+                          <span className="text-xs font-bold text-purple-600 mt-4 inline-block hover:underline">Open Encounters ➔</span>
+                        </div>
+                      </div>
                     </div>
                   )}
 
@@ -675,12 +781,12 @@ export default function App() {
                         <div className="lg:col-span-2 bg-white p-6 rounded-2xl border">
                             <div className="flex justify-between items-center border-b pb-2 mb-4">
                                 <h3 className="font-bold text-lg">Clinical Overview</h3>
-                                {user.role === 'Provider' && !isEditingProfile && (<button onClick={() => setIsEditingProfile(true)} className="text-sm text-blue-600 font-bold"><Edit3 size={16}/></button>)}
-                                {isEditingProfile && (<button onClick={handleSaveProfile} className="text-sm bg-emerald-600 text-white px-4 py-1.5 rounded-lg font-bold">Save</button>)}
+                                {user.role === 'Provider' && !isEditingProfile && (<button onClick={() => setIsEditingProfile(true)} className="text-sm text-blue-600 font-bold cursor-pointer"><Edit3 size={16}/></button>)}
+                                {isEditingProfile && (<button onClick={handleSaveProfile} className="text-sm bg-emerald-600 text-white px-4 py-1.5 rounded-lg font-bold cursor-pointer">Save</button>)}
                             </div>
                             {isEditingProfile ? (
                                 <div className="space-y-4">
-                                    <input type="text" value={profileForm.allergies} onChange={e => setProfileForm({...profileForm, allergies: e.target.value})} className="w-full p-2 border rounded-lg bg-slate-50" placeholder="Allergies" />
+                                    <input type="text" value={profileForm.allergies} onChange={e => setProfileForm({...profileForm, allergies: e.target.value})} className="w-full p-2 border rounded-lg bg-slate-50 outline-none" placeholder="Allergies" />
                                 </div>
                             ) : (
                                 <div className="space-y-6">
@@ -692,18 +798,17 @@ export default function App() {
                   )}
 
                   {dashTab === 'visits' && (
-                      <div className="space-y-6">
-                          <div className="bg-white p-6 rounded-2xl border"><h3 className="text-xl font-bold mb-2 flex items-center gap-2"><Stethoscope className="text-purple-600"/> Clinical Encounters</h3></div>
+                      <div className="space-y-6 animate-in fade-in duration-300">
+                          <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100"><h3 className="text-xl font-bold mb-2 text-slate-800 flex items-center gap-2"><Stethoscope className="text-purple-600"/> Clinical Encounters</h3></div>
                           {patientData.visits && Object.keys(patientData.visits).length > 0 ? (
-                              Object.values(patientData.visits).sort((a,b) => new Date(b.date) - new Date(a.date)).map((visit, idx) => (
-                                  <div key={idx} className="bg-white p-6 rounded-2xl border hover:shadow-md transition-shadow">
-                                      <div className="flex justify-between border-b pb-4 mb-4"><h4 className="font-bold text-lg">Encounter: {visit.date}</h4><p className="text-sm text-slate-500">{visit.provider}</p></div>
+                              Object.values(patientData.visits).sort((a, b) => new Date(b.date) - new Date(a.date)).map((visit, idx) => (
+                                  <div key={idx} className="bg-white p-4 md:p-6 rounded-2xl shadow-sm border border-slate-100 hover:shadow-md transition-shadow">
+                                      <div className="flex justify-between items-center border-b pb-4 mb-4"><div><h4 className="font-bold text-lg text-slate-800">Encounter: {visit.date}</h4><p className="text-sm text-slate-500">Provider: {visit.provider}</p></div></div>
                                       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                                           <div className="space-y-4">
-                                              
                                               <div className="bg-emerald-50 p-4 rounded-xl border border-emerald-100 shadow-sm">
-                                                <p className="text-xs font-bold text-emerald-700 uppercase mb-1">AI Clinical Summary</p>
-                                                <div className="text-sm text-emerald-900 whitespace-pre-wrap">{renderFormattedText(visit.ai_summary)}</div>
+                                                <p className="text-xs font-bold text-emerald-700 uppercase mb-1">AI Visit Summary</p>
+                                                <div className="text-sm text-emerald-900 whitespace-pre-wrap">{renderFormattedText(visit.ai_summary || "No specific metrics detected.")}</div>
                                               </div>
 
                                               {visit.patient_note && (
@@ -714,7 +819,7 @@ export default function App() {
                                               )}
                                               
                                               {visit.ai_terminology && Object.keys(visit.ai_terminology).length > 0 && (
-                                                <div className="bg-blue-50 p-4 rounded-xl border border-blue-100">
+                                                <div className="bg-blue-50 p-4 rounded-xl border border-blue-100 shadow-sm">
                                                   <p className="text-xs font-bold text-blue-700 uppercase mb-2 flex items-center gap-1"><BookOpen size={14}/> Terminology Guide</p>
                                                   <ul className="space-y-2">
                                                     {Object.entries(visit.ai_terminology).map(([term, definition], i) => (
@@ -723,17 +828,15 @@ export default function App() {
                                                   </ul>
                                                 </div>
                                               )}
-                                              
                                               <div><p className="text-xs font-bold text-slate-500 uppercase mb-2">Attached Documents</p><ul className="space-y-2">{visit.documents.map((doc, i) => (<li key={i} className="flex items-center gap-2 text-sm text-slate-700 bg-slate-50 p-2 rounded border break-all"><FileText size={14} className="text-slate-400 shrink-0"/> {doc}</li>))}</ul></div>
                                           </div>
                                           
-                                          {/* 🎙️ Voice Note Component */}
+                                          {/* 🎙️ Voice dictation wired to provider side */}
                                           <EncounterVoiceNote 
                                             targetPatient={activePatient} visitDate={visit.date} providerName={user.real_name}
                                             noteValue={visitNotes[visit.date] || ''}
                                             setNoteValue={(val) => setVisitNotes({...visitNotes, [visit.date]: val})}
-                                            onSave={() => handleSaveVisitNote(visit.date)}
-                                            isPatient={user.role === 'Patient'}
+                                            showToast={showToast}
                                           />
                                       </div>
                                   </div>
@@ -764,10 +867,10 @@ export default function App() {
                                 <div className="bg-white p-6 rounded-2xl border">
                                     <h3 className="font-bold mb-4 flex items-center gap-2"><Edit3 className="text-cyan-600" size={20}/> New Prescription</h3>
                                     <form onSubmit={handleAddPrescription} className="space-y-4">
-                                        <div><input type="text" placeholder="Medication Name" required value={prescriptionInput.medication_name} onChange={e => setPrescriptionInput({...prescriptionInput, medication_name: e.target.value})} className="w-full p-2 border rounded bg-slate-50 focus:ring-2" /></div>
-                                        <div><input type="text" placeholder="Dosage" required value={prescriptionInput.dosage} onChange={e => setPrescriptionInput({...prescriptionInput, dosage: e.target.value})} className="w-full p-2 border rounded bg-slate-50 focus:ring-2" /></div>
-                                        <div><textarea placeholder="Instructions (Sig)" required value={prescriptionInput.instructions} onChange={e => setPrescriptionInput({...prescriptionInput, instructions: e.target.value})} className="w-full p-2 border rounded bg-slate-50 h-24 focus:ring-2"></textarea></div>
-                                        <button type="submit" className="w-full bg-cyan-600 text-white font-bold py-2 rounded">Prescribe</button>
+                                        <div><input type="text" placeholder="Medication Name" required value={prescriptionInput.medication_name} onChange={e => setPrescriptionInput({...prescriptionInput, medication_name: e.target.value})} className="w-full p-2 border rounded bg-slate-50 focus:ring-2 outline-none" /></div>
+                                        <div><input type="text" placeholder="Dosage" required value={prescriptionInput.dosage} onChange={e => setPrescriptionInput({...prescriptionInput, dosage: e.target.value})} className="w-full p-2 border rounded bg-slate-50 focus:ring-2 outline-none" /></div>
+                                        <div><textarea placeholder="Instructions (Sig)" required value={prescriptionInput.instructions} onChange={e => setPrescriptionInput({...prescriptionInput, instructions: e.target.value})} className="w-full p-2 border rounded bg-slate-50 h-24 focus:ring-2 outline-none"></textarea></div>
+                                        <button type="submit" className="w-full bg-cyan-600 text-white font-bold py-2 rounded cursor-pointer">Prescribe</button>
                                     </form>
                                 </div>
                             </div>
@@ -797,9 +900,9 @@ export default function App() {
                                 <div className="bg-white p-6 rounded-2xl border">
                                     <h3 className="font-bold mb-4 flex items-center gap-2"><Edit3 className="text-pink-600" size={20}/> New Order</h3>
                                     <form onSubmit={handleAddOrder} className="space-y-4">
-                                        <div><input type="text" placeholder="Test Name" required value={orderInput.test_name} onChange={e => setOrderInput({...orderInput, test_name: e.target.value})} className="w-full p-2 border rounded bg-slate-50" /></div>
-                                        <div><textarea placeholder="Clinical Reason (Dx)" required value={orderInput.reason} onChange={e => setOrderInput({...orderInput, reason: e.target.value})} className="w-full p-2 border rounded bg-slate-50 h-24"></textarea></div>
-                                        <button type="submit" className="w-full bg-pink-600 text-white font-bold py-2 rounded">Sign Order</button>
+                                        <div><input type="text" placeholder="Test Name" required value={orderInput.test_name} onChange={e => setOrderInput({...orderInput, test_name: e.target.value})} className="w-full p-2 border rounded bg-slate-50 outline-none" /></div>
+                                        <div><textarea placeholder="Clinical Reason (Dx)" required value={orderInput.reason} onChange={e => setOrderInput({...orderInput, reason: e.target.value})} className="w-full p-2 border rounded bg-slate-50 h-24 outline-none"></textarea></div>
+                                        <button type="submit" className="w-full bg-pink-600 text-white font-bold py-2 rounded cursor-pointer">Sign Order</button>
                                     </form>
                                 </div>
                             </div>
@@ -817,8 +920,8 @@ export default function App() {
                                ))}
                            </div>
                            {patientData.categories[activeCategory]?.length > 0 && (
-                               <div className="bg-white p-4 rounded-xl border flex gap-4 mt-4">
-                                   <select value={selectedTestName} onChange={(e) => setSelectedTestName(e.target.value)} className="p-3 border rounded-lg bg-slate-50 font-semibold w-full focus:ring-2">
+                               <div className="bg-white p-4 rounded-xl border border-slate-200 flex gap-4 mt-4">
+                                   <select value={selectedTestName} onChange={(e) => setSelectedTestName(e.target.value)} className="p-3 border rounded-lg bg-slate-50 font-semibold w-full focus:ring-2 outline-none">
                                        {patientData.categories[activeCategory].map(test => (<option key={test.test_name} value={test.test_name}>{test.test_name}</option>))}
                                    </select>
                                </div>
@@ -888,9 +991,16 @@ export default function App() {
                             <div className="bg-white p-6 rounded-2xl border">
                                 <h3 className="font-bold mb-4 flex items-center gap-2"><Scale className="text-orange-500" size={20}/> Log New Vitals</h3>
                                 <form onSubmit={handleLogVitals} className="space-y-4">
-                                    <div><input type="number" step="0.1" placeholder="Height (cm)" value={vitalsInput.height} onChange={(e) => setVitalsInput({...vitalsInput, height: e.target.value})} className="w-full p-2 border rounded bg-slate-50" /></div>
-                                    <div><input type="number" step="0.1" placeholder="Weight (kg)" value={vitalsInput.weight} onChange={(e) => setVitalsInput({...vitalsInput, weight: e.target.value})} className="w-full p-2 border rounded bg-slate-50" /></div>
-                                    <button type="submit" className="w-full bg-orange-500 text-white font-bold py-2 rounded">Save</button>
+                                    {/* --- 5. INLINE UNITS BONDED INSIDE VITALS INPUTS --- */}
+                                    <div className="relative flex items-center">
+                                      <input type="number" step="0.1" placeholder="Height" required value={vitalsInput.height} onChange={(e) => setVitalsInput({...vitalsInput, height: e.target.value})} className="w-full p-2.5 pr-10 border rounded-xl bg-slate-50 outline-none focus:ring-2 focus:ring-orange-500 font-bold" />
+                                      <span className="absolute right-3 text-xs font-mono font-bold text-slate-400 pointer-events-none">cm</span>
+                                    </div>
+                                    <div className="relative flex items-center">
+                                      <input type="number" step="0.1" placeholder="Weight" required value={vitalsInput.weight} onChange={(e) => setVitalsInput({...vitalsInput, weight: e.target.value})} className="w-full p-2.5 pr-10 border rounded-xl bg-slate-50 outline-none focus:ring-2 focus:ring-orange-500 font-bold" />
+                                      <span className="absolute right-3 text-xs font-mono font-bold text-slate-400 pointer-events-none">kg</span>
+                                    </div>
+                                    <button type="submit" className="w-full bg-orange-500 hover:bg-orange-600 text-white font-bold py-3 rounded-xl shadow-sm cursor-pointer">Save to Trajectory</button>
                                 </form>
                                 {patientData.vitals && patientData.vitals.length > 0 && (
                                     <div className="mt-4 p-3 bg-orange-50 rounded-lg text-center"><p className="text-sm text-orange-800 font-bold mb-1">Current BMI</p><p className="text-2xl text-orange-600 font-black">{patientData.vitals[patientData.vitals.length-1].BMI}</p></div>
@@ -964,12 +1074,12 @@ export default function App() {
                     <p className="text-slate-600 text-center text-sm mb-4">The AI couldn't clearly read a patient name from this scan. Who does this belong to?</p>
                     <div className="space-y-2 mb-6 max-h-48 overflow-y-auto pr-2">
                         {(user.role === 'Provider' ? providerRoster : familyMembers).map(p => (
-                            <button key={p.name} onClick={() => setSelectedScanPatient(p.name)} className={`w-full p-3 rounded-xl border-2 font-bold transition-all ${selectedScanPatient === p.name ? 'bg-orange-50 border-orange-500 text-orange-700 shadow-sm' : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50 hover:border-slate-300'}`}>{p.name}</button>
+                            <button key={p.name} onClick={() => setSelectedScanPatient(p.name)} className={`w-full p-3 rounded-xl border-2 font-bold transition-all ${selectedScanPatient === p.name ? 'bg-orange-50 border-orange-500 text-orange-700 shadow-sm' : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50 hover:border-slate-300 cursor-pointer'}`}>{p.name}</button>
                         ))}
                     </div>
                     <div className="flex gap-3">
-                        <button onClick={() => { setScanModal(null); setView(user.role === 'Provider' ? 'provider_roster' : 'dashboard'); }} className="flex-1 bg-white border border-slate-300 text-slate-700 font-bold py-3 rounded-xl hover:bg-slate-50 transition">Cancel</button>
-                        <button disabled={!selectedScanPatient} onClick={confirmScanModal} className={`flex-1 font-bold py-3 rounded-xl transition shadow-sm flex items-center justify-center gap-2 ${!selectedScanPatient ? 'bg-slate-300 text-slate-500 cursor-not-allowed' : 'bg-orange-600 text-white hover:bg-orange-700'}`}><Save size={18}/> Save to Chart</button>
+                        <button onClick={() => { setScanModal(null); setView(user.role === 'Provider' ? 'provider_roster' : 'dashboard'); }} className="flex-1 bg-white border border-slate-300 text-slate-700 font-bold py-3 rounded-xl hover:bg-slate-50 transition cursor-pointer">Cancel</button>
+                        <button disabled={!selectedScanPatient} onClick={confirmScanModal} className={`flex-1 font-bold py-3 rounded-xl transition shadow-sm flex items-center justify-center gap-2 ${!selectedScanPatient ? 'bg-slate-300 text-slate-500 cursor-not-allowed' : 'bg-orange-600 text-white hover:bg-orange-700 cursor-pointer'}`}><Save size={18}/> Save to Chart</button>
                     </div>
                 </>
             ) : scanModal.type === 'error' ? (
@@ -977,7 +1087,7 @@ export default function App() {
                     <div className="w-16 h-16 bg-red-100 text-red-600 rounded-full flex items-center justify-center mx-auto mb-4"><AlertTriangle size={32} /></div>
                     <h3 className="text-xl font-bold text-slate-900 text-center mb-2">Scan Failed</h3>
                     <p className="text-slate-600 text-sm text-center mb-6 whitespace-pre-wrap">{scanModal.message}</p>
-                    <button onClick={() => setScanModal(null)} className="w-full bg-slate-800 text-white font-bold py-3 rounded-xl hover:bg-slate-900 transition shadow-sm">Acknowledge</button>
+                    <button onClick={() => setScanModal(null)} className="w-full bg-slate-800 text-white font-bold py-3 rounded-xl hover:bg-slate-900 transition shadow-sm cursor-pointer">Acknowledge</button>
                 </>
             ) : (
                 <>
@@ -988,7 +1098,7 @@ export default function App() {
                             <p className="text-slate-600 text-center text-sm mb-4">We found multiple potential matches in this record. Please select the correct patient chart:</p>
                             <div className="space-y-2 max-h-48 overflow-y-auto pr-2">
                                 {scanModal.patients.map(p => (
-                                    <button key={p} onClick={() => setSelectedScanPatient(p)} className={`w-full p-3 rounded-xl border-2 font-bold transition-all ${selectedScanPatient === p ? 'bg-blue-50 border-blue-500 text-blue-700 shadow-sm' : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50 hover:border-slate-300'}`}>{p}</button>
+                                    <button key={p} onClick={() => setSelectedScanPatient(p)} className={`w-full p-3 rounded-xl border-2 font-bold transition-all ${selectedScanPatient === p ? 'bg-blue-50 border-blue-500 text-blue-700 shadow-sm' : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50 hover:border-slate-300 cursor-pointer'}`}>{p}</button>
                                 ))}
                             </div>
                         </div>
@@ -996,8 +1106,8 @@ export default function App() {
 
                     {scanModal.type === 'text' && (<div className="bg-slate-50 p-3 rounded-lg border border-slate-200 mb-6 max-h-32 overflow-y-auto"><p className="text-xs text-slate-500 italic whitespace-pre-wrap">"{scanModal.payload}"</p></div>)}
                     <div className="flex gap-3 mt-4">
-                        <button onClick={() => { setScanModal(null); setView(user.role === 'Provider' ? 'provider_roster' : 'dashboard'); }} className="flex-1 bg-white border border-slate-300 text-slate-700 font-bold py-3 rounded-xl hover:bg-slate-50 transition">Cancel</button>
-                        <button onClick={confirmScanModal} className="flex-1 bg-blue-600 text-white font-bold py-3 rounded-xl hover:bg-blue-700 transition shadow-sm flex items-center justify-center gap-2"><Save size={18}/> Save to Chart</button>
+                        <button onClick={() => { setScanModal(null); setView(user.role === 'Provider' ? 'provider_roster' : 'dashboard'); }} className="flex-1 bg-white border border-slate-300 text-slate-700 font-bold py-3 rounded-xl hover:bg-slate-50 transition cursor-pointer">Cancel</button>
+                        <button onClick={confirmScanModal} className="flex-1 bg-blue-600 text-white font-bold py-3 rounded-xl hover:bg-blue-700 transition shadow-sm flex items-center justify-center gap-2 cursor-pointer"><Save size={18}/> Save to Chart</button>
                     </div>
                 </>
             )}
@@ -1005,23 +1115,33 @@ export default function App() {
         </div>
       )}
 
-      {/* --- 🚨 GLOBAL LOADING / SAVING OVERLAY --- */}
+      {/* --- 2. ESCAPE HATCH TRAPDOORS IN FULL-SCREEN OVERLAYS --- */}
       {isSaving && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[99999] flex flex-col justify-center items-center text-white px-4 animate-in fade-in duration-300">
-          <div className="bg-white p-8 rounded-2xl shadow-2xl flex flex-col items-center max-w-sm w-full text-center border border-slate-100">
+        <div className="fixed inset-0 bg-slate-900/80 backdrop-blur-sm z-[99999] flex flex-col justify-center items-center text-white px-4 animate-in fade-in duration-300">
+          <div className="bg-slate-900 p-8 rounded-3xl shadow-2xl flex flex-col items-center max-w-sm w-full text-center border border-slate-800">
             <EcgLoader size={48} className="mb-4" />
-            <h3 className="text-slate-900 font-bold text-lg mb-1">Processing Document</h3>
-            <p className="text-slate-500 text-sm">AI is actively extracting and mapping lab values...</p>
+            <h3 className="text-white font-bold text-lg mb-1">Processing Chart Payload</h3>
+            <p className="text-slate-400 text-xs mt-1">AI is actively mapping unstructured terminology & vectors...</p>
+            
+            {/* Trapdoor Cancel Button */}
+            <button onClick={() => { setIsSaving(false); showToast("Operation manually aborted.", "info"); }} className="mt-8 text-xs font-semibold text-slate-500 hover:text-rose-400 underline transition-colors cursor-pointer">
+              Taking too long? Cancel request
+            </button>
           </div>
         </div>
       )}
 
       {isScanning && !isSaving && (
-        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-[99999] flex flex-col justify-center items-center text-white px-4 animate-in fade-in duration-300">
-          <div className="bg-white p-8 rounded-2xl shadow-2xl flex flex-col items-center max-w-sm w-full text-center border border-slate-100">
+        <div className="fixed inset-0 bg-slate-900/80 backdrop-blur-sm z-[99999] flex flex-col justify-center items-center text-white px-4 animate-in fade-in duration-300">
+          <div className="bg-slate-900 p-8 rounded-3xl shadow-2xl flex flex-col items-center max-w-sm w-full text-center border border-slate-800">
             <EcgLoader size={48} className="mb-4" />
-            <h3 className="text-slate-900 font-bold text-lg mb-1">AI Smart Scanning Active</h3>
-            <p className="text-slate-500 text-sm">Cross-referencing shared data...</p>
+            <h3 className="text-white font-bold text-lg mb-1">PWA Interceptor Scanning</h3>
+            <p className="text-slate-400 text-xs mt-1">Cross-referencing shared asset metadata...</p>
+            
+            {/* Trapdoor Cancel Button */}
+            <button onClick={() => { setIsScanning(false); showToast("Smart scan cancelled.", "info"); }} className="mt-8 text-xs font-semibold text-slate-500 hover:text-rose-400 underline transition-colors cursor-pointer">
+              Taking too long? Cancel scan
+            </button>
           </div>
         </div>
       )}

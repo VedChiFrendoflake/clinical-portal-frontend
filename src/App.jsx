@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine, Legend } from 'recharts';
-import { Activity, Upload, User, ShieldCheck, UserPlus, Search, Users, ActivitySquare, Syringe, Bug, FlaskConical, AlertTriangle, Ruler, Scale, ClipboardList, Edit3, Save, Stethoscope, FileText, Pill, FileSignature, Settings, Link as LinkIcon, Inbox, Bell, Trash2, Mic, Square, BookOpen, HeartPulse, CheckCircle2, Info, X, Eye, Languages, Palette, Type, Scan } from 'lucide-react';
+import { Activity, Upload, User, ShieldCheck, UserPlus, Search, Users, ActivitySquare, Syringe, Bug, FlaskConical, AlertTriangle, Ruler, Scale, ClipboardList, Edit3, Save, Stethoscope, FileText, Pill, FileSignature, Settings, Link as LinkIcon, Bell, Trash2, Mic, Square, BookOpen, HeartPulse, CheckCircle2, Info, X, Eye, Languages, Palette, Type, Scan, RefreshCw } from 'lucide-react';
 
 const BACKEND_URL = "https://clinical-portal-backend-production.up.railway.app";
 
@@ -22,12 +22,12 @@ if (typeof window !== 'undefined' && !window._reactDomPatched) {
   };
 }
 
-// --- 🧭 THE 10 MASTER CHART TABS (Now verified featuring Radiology) ---
+// --- 🧭 THE 10 MASTER CHART TABS ---
 const CHART_NAV_ITEMS = [
   { id: 'overview', label: 'Overview', icon: HeartPulse, activeClass: 'bg-rose-50 text-rose-700 border-rose-200', iconClass: 'text-rose-600' },
   { id: 'profile', label: 'Profile', icon: ClipboardList, activeClass: 'bg-emerald-50 text-emerald-700 border-emerald-200', iconClass: 'text-emerald-600' },
   { id: 'visits', label: 'Encounters', icon: Stethoscope, activeClass: 'bg-purple-50 text-purple-700 border-purple-200', iconClass: 'text-purple-600' },
-  { id: 'radiology', label: 'Radiology', icon: Scan, activeClass: 'bg-indigo-50 text-indigo-700 border-indigo-200', iconClass: 'text-indigo-600' }, // <-- RESTORED
+  { id: 'radiology', label: 'Radiology', icon: Scan, activeClass: 'bg-indigo-50 text-indigo-700 border-indigo-200', iconClass: 'text-indigo-600' },
   { id: 'prescriptions', label: 'Rx & Meds', icon: Pill, activeClass: 'bg-cyan-50 text-cyan-700 border-cyan-200', iconClass: 'text-cyan-600' },
   { id: 'orders', label: 'Orders', icon: FileSignature, activeClass: 'bg-pink-50 text-pink-700 border-pink-200', iconClass: 'text-pink-600' },
   { id: 'labs', label: 'Labs', icon: FlaskConical, activeClass: 'bg-blue-50 text-blue-700 border-blue-200', iconClass: 'text-blue-600' },
@@ -36,6 +36,7 @@ const CHART_NAV_ITEMS = [
   { id: 'diseases', label: 'Screenings', icon: Bug, activeClass: 'bg-amber-50 text-amber-700 border-amber-200', iconClass: 'text-amber-600' },
 ];
 
+// --- 🫀 SUB-COMPONENT: LEFT-TO-RIGHT ECG LOADER ---
 const EcgLoader = ({ size = 48, className = "" }) => (
   <div className={`relative inline-block ${className}`} style={{ width: size, height: size }}>
     <Activity size={size} className="text-slate-200 absolute inset-0" />
@@ -43,6 +44,7 @@ const EcgLoader = ({ size = 48, className = "" }) => (
   </div>
 );
 
+// --- 🍞 SUB-COMPONENT: NATIVE INLINE TOAST SYSTEM ---
 const ToastBar = ({ toast, onClose }) => {
   if (!toast) return null;
   const icons = { success: CheckCircle2, error: AlertTriangle, info: Info };
@@ -107,7 +109,7 @@ const EncounterVoiceNote = ({ targetPatient, visitDate, providerName, noteValue,
           </button>
         )}
       </div>
-      <textarea value={noteValue} onChange={(e) => setNoteValue(e.target.value)} placeholder="Type clinical notes manually, or dictate to let AI clean up spoken dictation..." className="w-full flex-grow p-3 border rounded-lg bg-white text-sm focus:ring-2 focus:ring-purple-500 outline-none resize-none min-h-[100px] mb-3"></textarea>
+      <textarea value={noteValue} onChange={(e) => setNoteValue(e.target.value)} placeholder="Type clinical notes manually, or dictate to let AI format spoken dictation..." className="w-full flex-grow p-3 border rounded-lg bg-white text-sm focus:ring-2 focus:ring-purple-500 outline-none resize-none min-h-[100px] mb-3"></textarea>
     </div>
   );
 };
@@ -188,7 +190,12 @@ export default function App() {
     }
   };
 
-  const hardResetApp = async () => { localStorage.clear(); sessionStorage.clear(); window.location.reload(true); };
+  // --- 💥 MASTER OS HARD RESET FUNCTION ---
+  const hardResetApp = async () => {
+    if ('serviceWorker' in navigator) { const regs = await navigator.serviceWorker.getRegistrations(); for (let r of regs) await r.unregister(); }
+    if ('caches' in window) { const cacheNames = await caches.keys(); for (let c of cacheNames) await caches.delete(c); }
+    localStorage.clear(); sessionStorage.clear(); window.location.reload(true); 
+  };
 
   useEffect(() => {
     if (splashState === 'visible') {
@@ -414,10 +421,6 @@ export default function App() {
     try { await fetch(`${BACKEND_URL}/api/orders`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ target_patient: activePatient, ...orderInput }) }); setOrderInput({ test_name: '', reason: '' }); fetchPatientData(activePatient); showToast("Diagnostic order authorized.", "success"); } catch (err) {}
   };
 
-  const handleSaveVisitNoteFromVoice = async (date) => {
-    try { await fetch(`${BACKEND_URL}/api/visit/note`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ target_patient: activePatient, visit_date: date, note: visitNotes[date], provider_name: user?.real_name || "Unknown Provider" }) }); showToast("Synced narrative to master record.", "success"); fetchPatientData(activePatient); } catch (err) { showToast("Failed to sync.", "error"); }
-  };
-
   const handleCategoryClick = (category) => {
     setActiveCategory(category); 
     if (patientData.categories[category] && patientData.categories[category].length > 0) { setSelectedTestName(patientData.categories[category][0].test_name); } else { setSelectedTestName(''); }
@@ -500,11 +503,17 @@ export default function App() {
         <div className="animate-in fade-in duration-700">
           <nav className="bg-white shadow-sm border-b px-4 md:px-8 py-4 flex flex-wrap gap-4 justify-between items-center fixed w-full z-20 top-0">
             <h1 className="text-xl font-bold text-blue-600 flex items-center gap-2"><Activity /> ClinicalPortal</h1>
-            <div className="flex gap-3 md:gap-4 items-center">
+            <div className="flex gap-2 md:gap-4 items-center">
               <span className="text-xs font-mono font-bold bg-slate-100 text-slate-600 px-3 py-1 rounded-full hidden sm:block">ID: {isIdUnlocked ? user.uid : '••••••••'}</span>
-              <button onClick={() => setAccDrawerOpen(true)} className="p-2 rounded-lg bg-slate-100 text-slate-600 hover:bg-blue-600 hover:text-white transition-all cursor-pointer flex items-center gap-1 font-bold text-xs"><Settings size={16} /> <span className="hidden md:inline">Accessibility OS</span></button>
+              <button onClick={() => setAccDrawerOpen(true)} className="p-2 rounded-lg bg-slate-100 text-slate-600 hover:bg-blue-600 hover:text-white transition-all cursor-pointer flex items-center gap-1 font-bold text-xs"><Settings size={16} /> <span className="hidden md:inline">Accessibility</span></button>
               <span className="text-xs md:text-sm font-medium bg-slate-100 px-3 py-1 rounded-full">{user.real_name}</span>
-              <button onClick={() => { localStorage.removeItem('cliniport_user'); setUser(null); setView('login'); showToast("Securely signed out.", "info"); }} className="text-sm text-slate-500 hover:text-red-500 font-medium cursor-pointer">Log Out</button>
+              
+              {/* --- 1. THE TOP-RIGHT RESET BUTTON --- */}
+              <button onClick={hardResetApp} className="text-xs md:text-sm text-slate-400 hover:text-orange-500 font-bold ml-2 border-l border-slate-200 pl-3 cursor-pointer flex items-center gap-1">
+                <RefreshCw size={14}/> Reset App
+              </button>
+
+              <button onClick={() => { localStorage.removeItem('cliniport_user'); setUser(null); setView('login'); showToast("Securely signed out.", "info"); }} className="text-sm text-slate-500 hover:text-red-500 font-medium cursor-pointer ml-2">Log Out</button>
             </div>
           </nav>
 
@@ -568,7 +577,7 @@ export default function App() {
                     </div>
                   )}
 
-                  {/* --- 4. LANDING "OVERVIEW" DASHBOARD TAB --- */}
+                  {/* --- LANDING "OVERVIEW" DASHBOARD TAB --- */}
                   {dashTab === 'overview' && (
                     <div className="space-y-6 animate-in fade-in duration-300">
                       <div className="bg-gradient-to-r from-rose-500 to-red-500 rounded-3xl p-8 text-white shadow-lg flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4"><div><span className="bg-white/20 px-3 py-1 rounded-full text-xs font-mono font-bold uppercase tracking-wider">Master Health Dashboard</span><h2 className="text-3xl font-black mt-2">Am I Okay?</h2><p className="text-rose-100 text-sm mt-1">Clinical telemetry & vital metrics are currently operating within expected standard trajectories.</p></div><button onClick={() => setDashTab('visits')} className="bg-white text-rose-900 font-black px-6 py-3 rounded-2xl shadow-md hover:bg-rose-50 transition cursor-pointer shrink-0">Review Doctor Notes ➔</button></div>
@@ -576,39 +585,20 @@ export default function App() {
                     </div>
                   )}
 
-                  {/* --- ☢️ THE 10TH TAB: RADIOLOGY & IMAGING SUITE --- */}
+                  {/* --- ☢️ RADIOLOGY & IMAGING SUITE --- */}
                   {dashTab === 'radiology' && (
                     <div className="space-y-6 animate-in fade-in duration-300">
-                       <div className="bg-white p-6 rounded-2xl border flex items-center justify-between"><h3 className="text-xl font-bold flex items-center gap-2"><Scan className="text-indigo-600"/> Radiology & PACS Suite</h3><span className="text-xs bg-indigo-50 text-indigo-700 font-bold px-3 py-1 rounded-full border border-indigo-200">Multimodal DICOM Linked</span></div>
-
+                       <div className="bg-white p-6 rounded-2xl border flex items-center justify-between"><h3 className="text-xl font-bold flex items-center gap-2"><Scan className="text-indigo-600"/> Radiology & PACS Suite</h3><span className="text-xs bg-indigo-50 text-indigo-700 font-bold px-3 py-1 rounded-full border border-indigo-200">Multimodal Linked</span></div>
                        {user.role === 'Provider' && (
                           <div className="bg-white p-6 rounded-2xl border shadow-xs">
                             <h4 className="font-bold text-slate-800 mb-4 flex items-center gap-2"><Upload size={16} className="text-indigo-600"/> Attach PACS/DICOM Scan Asset</h4>
-                            <form onSubmit={handleRadiologyPacketSubmit} className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                               <div><label className="text-xs font-bold text-slate-400 uppercase">Anatomical Scan Title</label><input type="text" placeholder="e.g. Cervical Spine Series" required value={radioUploadAsset.title} onChange={e => setRadioUploadAsset({...radioUploadAsset, title: e.target.value})} className="w-full p-2.5 border rounded-xl bg-slate-50 mt-1 font-semibold outline-none focus:ring-2 focus:ring-indigo-500" /><label className="block mt-4 text-xs font-bold text-slate-400 uppercase mb-1">Select Asset Frame</label><input type="file" accept="image/*" required onChange={e => setRadioUploadAsset({...radioUploadAsset, file: e.target.files[0]})} className="w-full p-2 border rounded-xl bg-slate-50 text-xs" /></div>
-                               <div className="flex flex-col"><label className="text-xs font-bold text-slate-400 uppercase">Physician Technical Findings</label><textarea placeholder="Type anatomical notes here. Gemini Multimodal Vision will interpret the image alongside these notes into layman's terms..." required value={radioUploadAsset.note} onChange={e => setRadioUploadAsset({...radioUploadAsset, note: e.target.value})} className="w-full flex-grow p-2.5 border rounded-xl bg-slate-50 mt-1 outline-none focus:ring-2 focus:ring-indigo-500 resize-none min-h-[100px]"></textarea></div>
-                               <button type="submit" className="md:col-span-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 rounded-xl shadow-sm transition cursor-pointer">Process Radiology Packet ➔</button>
-                            </form>
+                            <form onSubmit={handleRadiologyPacketSubmit} className="grid grid-cols-1 md:grid-cols-2 gap-4"><div><input type="text" placeholder="Anatomical Scan Title" required value={radioUploadAsset.title} onChange={e => setRadioUploadAsset({...radioUploadAsset, title: e.target.value})} className="w-full p-2.5 border rounded-xl bg-slate-50 font-semibold outline-none" /><input type="file" accept="image/*" required onChange={e => setRadioUploadAsset({...radioUploadAsset, file: e.target.files[0]})} className="w-full p-2 border rounded-xl bg-slate-50 text-xs mt-3" /></div><div><textarea placeholder="Physician Technical Findings..." required value={radioUploadAsset.note} onChange={e => setRadioUploadAsset({...radioUploadAsset, note: e.target.value})} className="w-full h-full p-2.5 border rounded-xl bg-slate-50 outline-none resize-none min-h-[100px]"></textarea></div><button type="submit" className="md:col-span-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 rounded-xl cursor-pointer">Process Radiology Packet ➔</button></form>
                           </div>
                        )}
-
                        <div className="space-y-4">
                          {patientData.radiology && patientData.radiology.length > 0 ? (
                            patientData.radiology.map((scan, idx) => (
-                             <div key={idx} className="bg-white rounded-2xl border overflow-hidden shadow-xs">
-                               <div className="bg-slate-50 p-4 border-b flex justify-between items-center"><span className="font-black text-slate-800 text-lg">{scan.scan_title}</span><span className="text-xs font-mono text-slate-400">{scan.date} • {scan.provider}</span></div>
-                               <div className="p-6 grid grid-cols-1 md:grid-cols-3 gap-6 items-center">
-                                 <div className="bg-slate-950 rounded-2xl p-4 flex flex-col items-center justify-center h-48 border-2 border-slate-800 relative group overflow-hidden shadow-inner">
-                                   <Scan size={64} className="text-cyan-400 animate-pulse opacity-40 absolute" />
-                                   <div className="absolute inset-0 bg-[linear-gradient(to_right,#1e293b_1px,transparent_1px),linear-gradient(to_bottom,#1e293b_1px,transparent_1px)] bg-[size:1rem_1rem] opacity-30" />
-                                   <span className="text-[10px] font-mono text-cyan-300 bg-slate-900/80 px-2 py-1 rounded border border-cyan-800 z-10">DICOM ASSET: {scan.file_name}</span>
-                                 </div>
-                                 <div className="md:col-span-2 space-y-4">
-                                    <div className="bg-indigo-50/70 p-4 rounded-2xl border border-indigo-100"><p className="text-xs font-extrabold text-indigo-950 uppercase tracking-wider mb-1 flex items-center gap-1.5"><HeartPulse size={14} className="text-indigo-600"/> AI Layperson Interpretation (For You)</p><p className="text-sm text-indigo-900 font-medium leading-relaxed">{scan.patient_explanation}</p></div>
-                                    <div className="bg-slate-50 p-3.5 rounded-xl border border-slate-200"><p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1">Physician Technical Findings</p><p className="text-xs font-mono text-slate-700">{scan.doctor_note}</p></div>
-                                 </div>
-                               </div>
-                             </div>
+                             <div key={idx} className="bg-white rounded-2xl border overflow-hidden shadow-xs"><div className="bg-slate-50 p-4 border-b flex justify-between items-center"><span className="font-black text-slate-800 text-lg">{scan.scan_title}</span><span className="text-xs font-mono text-slate-400">{scan.date} • {scan.provider}</span></div><div className="p-6 grid grid-cols-1 md:grid-cols-3 gap-6 items-center"><div className="bg-slate-950 rounded-2xl p-4 flex flex-col items-center justify-center h-48 border-2 border-slate-800 relative overflow-hidden shadow-inner"><Scan size={64} className="text-cyan-400 animate-pulse opacity-40 absolute" /><span className="text-[10px] font-mono text-cyan-300 bg-slate-900/80 px-2 py-1 rounded border z-10">DICOM ASSET: {scan.file_name}</span></div><div className="md:col-span-2 space-y-4"><div className="bg-indigo-50/70 p-4 rounded-2xl border border-indigo-100"><p className="text-xs font-extrabold text-indigo-950 uppercase mb-1 flex items-center gap-1.5"><HeartPulse size={14} className="text-indigo-600"/> AI Layperson Interpretation (For You)</p><p className="text-sm text-indigo-900 font-medium leading-relaxed">{scan.patient_explanation}</p></div><div className="bg-slate-50 p-3.5 rounded-xl border"><p className="text-[11px] font-bold text-slate-400 uppercase mb-1">Physician Technical Findings</p><p className="text-xs font-mono text-slate-700">{scan.doctor_note}</p></div></div></div></div>
                            ))
                          ) : (<div className="bg-white p-12 text-center rounded-2xl border border-dashed"><p className="text-slate-500">No radiological imaging recorded.</p></div>)}
                        </div>
@@ -621,7 +611,7 @@ export default function App() {
                   )}
 
                   {dashTab === 'visits' && (
-                      <div className="space-y-6 animate-in fade-in duration-300"><div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100"><h3 className="text-xl font-bold mb-2 text-slate-800 flex items-center gap-2"><Stethoscope className="text-purple-600"/> Clinical Encounters</h3></div>{patientData.visits && Object.keys(patientData.visits).length > 0 ? (Object.values(patientData.visits).sort((a, b) => new Date(b.date) - new Date(a.date)).map((visit, idx) => (<div key={idx} className="bg-white p-4 md:p-6 rounded-2xl shadow-sm border border-slate-100 hover:shadow-md transition-shadow"><div className="flex justify-between items-center border-b pb-4 mb-4"><div><h4 className="font-bold text-lg text-slate-800">Encounter: {visit.date}</h4><p className="text-sm text-slate-500">Provider: {visit.provider}</p></div></div><div className="grid grid-cols-1 lg:grid-cols-2 gap-6"><div className="space-y-4"><div className="bg-emerald-50 p-4 rounded-xl border border-emerald-100 shadow-sm"><p className="text-xs font-bold text-emerald-700 uppercase mb-1">AI Visit Summary</p><div className="text-sm text-emerald-900 whitespace-pre-wrap">{renderFormattedText(visit.ai_summary || "No specific metrics detected.")}</div></div>{visit.patient_note && (<div className="bg-pink-50 p-4 rounded-xl border border-pink-100 shadow-sm"><p className="text-xs font-bold text-pink-700 uppercase mb-1 flex items-center gap-1"><HeartPulse size={14}/> Patient Explanation</p><div className="text-sm text-pink-900 whitespace-pre-wrap">{renderFormattedText(visit.patient_note)}</div></div>)}{visit.ai_terminology && Object.keys(visit.ai_terminology).length > 0 && (<div className="bg-blue-50 p-4 rounded-xl border border-blue-100 shadow-sm"><p className="text-xs font-bold text-blue-700 uppercase mb-2 flex items-center gap-1"><BookOpen size={14}/> Terminology Guide</p><ul className="space-y-2">{Object.entries(visit.ai_terminology).map(([term, definition], i) => (<li key={i} className="text-sm text-blue-900 bg-white p-2 rounded border border-blue-50"><strong>{term}:</strong> {definition}</li>))}</ul></div>)}<div><p className="text-xs font-bold text-slate-500 uppercase mb-2">Attached Documents</p><ul className="space-y-2">{visit.documents.map((doc, i) => (<li key={i} className="flex items-center gap-2 text-sm text-slate-700 bg-slate-50 p-2 rounded border break-all"><FileText size={14} className="text-slate-400 shrink-0"/> {doc}</li>))}</ul></div></div><EncounterVoiceNote targetPatient={activePatient} visitDate={visit.date} providerName={user.real_name} noteValue={visitNotes[visit.date] || ''} setNoteValue={(val) => setVisitNotes({...visitNotes, [visit.date]: val})} showToast={showToast}/></div></div>))) : (<div className="bg-white p-12 text-center rounded-2xl border border-slate-100 border-dashed"><p className="text-slate-500">No recorded encounters.</p></div>)}</div>
+                      <div className="space-y-6 animate-in fade-in duration-300"><div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100"><h3 className="text-xl font-bold mb-2 text-slate-800 flex items-center gap-2"><Stethoscope className="text-purple-600"/> Clinical Encounters</h3></div>{patientData.visits && Object.keys(patientData.visits).length > 0 ? (Object.values(patientData.visits).sort((a, b) => new Date(b.date) - new Date(a.date)).map((visit, idx) => (<div key={idx} className="bg-white p-4 md:p-6 rounded-2xl shadow-sm border border-slate-100 hover:shadow-md transition-shadow"><div className="flex justify-between items-center border-b pb-4 mb-4"><div><h4 className="font-bold text-lg text-slate-800">Encounter: {visit.date}</h4><p className="text-sm text-slate-500">Provider: {visit.provider}</p></div></div><div className="grid grid-cols-1 lg:grid-cols-2 gap-6"><div className="space-y-4"><div className="bg-emerald-50 p-4 rounded-xl border border-emerald-100 shadow-sm"><p className="text-xs font-bold text-emerald-700 uppercase mb-1">AI Visit Summary</p><div className="text-sm text-emerald-900 whitespace-pre-wrap">{renderFormattedText(visit.ai_summary)}</div></div>{visit.patient_note && (<div className="bg-pink-50 p-4 rounded-xl border border-pink-100 shadow-sm"><p className="text-xs font-bold text-pink-700 uppercase mb-1 flex items-center gap-1"><HeartPulse size={14}/> Patient Explanation</p><div className="text-sm text-pink-900 whitespace-pre-wrap">{renderFormattedText(visit.patient_note)}</div></div>)}{visit.ai_terminology && Object.keys(visit.ai_terminology).length > 0 && (<div className="bg-blue-50 p-4 rounded-xl border border-blue-100 shadow-sm"><p className="text-xs font-bold text-blue-700 uppercase mb-2 flex items-center gap-1"><BookOpen size={14}/> Terminology Guide</p><ul className="space-y-2">{Object.entries(visit.ai_terminology).map(([term, definition], i) => (<li key={i} className="text-sm text-blue-900 bg-white p-2 rounded border border-blue-50"><strong>{term}:</strong> {definition}</li>))}</ul></div>)}<div><p className="text-xs font-bold text-slate-500 uppercase mb-2">Attached Documents</p><ul className="space-y-2">{visit.documents.map((doc, i) => (<li key={i} className="flex items-center gap-2 text-sm text-slate-700 bg-slate-50 p-2 rounded border break-all"><FileText size={14} className="text-slate-400 shrink-0"/> {doc}</li>))}</ul></div></div><EncounterVoiceNote targetPatient={activePatient} visitDate={visit.date} providerName={user.real_name} noteValue={visitNotes[visit.date] || ''} setNoteValue={(val) => setVisitNotes({...visitNotes, [visit.date]: val})} showToast={showToast}/></div></div>))) : (<div className="bg-white p-12 text-center rounded-2xl border border-slate-100 border-dashed"><p className="text-slate-500">No recorded encounters.</p></div>)}</div>
                   )}
 
                   {dashTab === 'prescriptions' && (
@@ -701,6 +691,14 @@ export default function App() {
                     <button onClick={() => handleCbChange('tritanopia')} className={`p-3 rounded-xl border font-bold text-xs cursor-pointer ${colorblindMode === 'tritanopia' ? 'bg-indigo-600 text-white' : 'bg-indigo-50 text-indigo-900'}`}>Tritanopia (Blue-Blind)</button>
                   </div>
                 </div>
+
+                {/* --- 💥 THE MASTER HARD RESET BUTTON --- */}
+                <div className="pt-4 border-t border-slate-200">
+                  <button onClick={hardResetApp} className="w-full bg-orange-600 hover:bg-orange-700 text-white font-black py-4 rounded-xl shadow-lg flex items-center justify-center gap-2 cursor-pointer transition-all active:scale-[0.98]">
+                    <RefreshCw size={18} /> <span>💥 Full System Hard Reset</span>
+                  </button>
+                  <p className="text-[11px] text-slate-400 text-center mt-2 leading-tight">Clears all local storage, browser caches, and unregisters background PWA service workers.</p>
+                </div>
               </div>
             </div>
 
@@ -714,18 +712,8 @@ export default function App() {
         <div className="fixed inset-0 bg-slate-900/80 backdrop-blur-xs z-[99999] flex flex-col justify-center items-center text-white px-4 animate-in fade-in duration-300">
           <div className="bg-slate-900 p-8 rounded-3xl shadow-2xl flex flex-col items-center max-w-sm w-full text-center border border-slate-800">
             <EcgLoader size={48} className="mb-4" />
-            <h3 className="text-white font-bold text-lg mb-1">Processing Chart Payload</h3>
-            <button onClick={() => { setIsSaving(false); showToast("Operation manually aborted.", "info"); }} className="mt-8 text-xs font-semibold text-slate-500 hover:text-rose-400 underline cursor-pointer">Taking too long? Cancel request</button>
-          </div>
-        </div>
-      )}
-
-      {isScanning && !isSaving && (
-        <div className="fixed inset-0 bg-slate-900/80 backdrop-blur-xs z-[99999] flex flex-col justify-center items-center text-white px-4 animate-in fade-in duration-300">
-          <div className="bg-slate-900 p-8 rounded-3xl shadow-2xl flex flex-col items-center max-w-sm w-full text-center border border-slate-800">
-            <EcgLoader size={48} className="mb-4" />
-            <h3 className="text-white font-bold text-lg mb-1">PWA Interceptor Scanning</h3>
-            <button onClick={() => { setIsScanning(false); showToast("Smart scan cancelled.", "info"); }} className="mt-8 text-xs font-semibold text-slate-500 hover:text-rose-400 underline cursor-pointer">Taking too long? Cancel scan</button>
+            <h3 className="text-white font-bold text-lg mb-1">Processing Payload</h3>
+            <button onClick={() => { setIsSaving(false); showToast("Aborted.", "info"); }} className="mt-8 text-xs font-semibold text-slate-500 hover:text-rose-400 underline cursor-pointer">Taking too long? Cancel request</button>
           </div>
         </div>
       )}

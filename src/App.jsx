@@ -56,8 +56,8 @@ const ToastBar = ({ toast, onClose }) => {
   );
 };
 
-// --- 🎙️ SUB-COMPONENT: AI VOICE DICTATION FOR PROVIDERS (Wired with Role Lockdown) ---
-const EncounterVoiceNote = ({ targetPatient, visitDate, providerName, noteValue, setNoteValue, onSave, isPatient }) => {
+// --- 🎙️ PROVIDER VOICE DICTATION (With explicit Patient Lockdown) ---
+const EncounterVoiceNote = ({ targetPatient, visitDate, providerName, noteValue, setNoteValue, patientNoteValue, setPatientNoteValue, onSave, isPatient, showToast }) => {
   const [isRecording, setIsRecording] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
   const mediaRecorderRef = useRef(null); const audioChunksRef = useRef([]);
@@ -69,7 +69,8 @@ const EncounterVoiceNote = ({ targetPatient, visitDate, providerName, noteValue,
       mediaRecorderRef.current.ondataavailable = (e) => { if (e.data.size > 0) audioChunksRef.current.push(e.data); };
       mediaRecorderRef.current.onstop = async () => { await uploadVoiceNote(new Blob(audioChunksRef.current, { type: 'audio/webm' })); };
       mediaRecorderRef.current.start(); setIsRecording(true);
-    } catch (err) { alert("Microphone access denied."); }
+      showToast("Live dictation active. Speak clearly near microphone.", "info");
+    } catch (err) { showToast("Microphone permissions denied by browser.", "error"); }
   };
 
   const stopRecording = () => {
@@ -86,17 +87,26 @@ const EncounterVoiceNote = ({ targetPatient, visitDate, providerName, noteValue,
     try {
       const res = await fetch(`${BACKEND_URL}/api/visit/voice`, { method: "POST", body: fd });
       const data = await res.json();
-      if (data.status === "success") setNoteValue(data.note);
-    } catch (err) { alert("Upload failed."); } finally { setIsProcessing(false); }
+      if (data.status === "success") { setNoteValue(data.note); showToast("Formatted successfully!", "success"); }
+      else showToast("AI Failed: " + data.message, "error");
+    } catch (err) { showToast("Upload failed. Network dropped.", "error"); } finally { setIsProcessing(false); }
   };
 
-  // 🛡️ Ironclad Gatekeeper: If user role is 'Patient', strip input control interfaces completely
+  // 🛡️ PATIENT GATEKEEPER: Totally strips dictation controls for patients
   if (isPatient) {
     return (
-      <div className="flex flex-col h-full min-h-[180px]">
-        <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Official Physician Note</p>
-        <div className="w-full flex-grow p-4 border border-slate-200 bg-slate-50 text-sm rounded-2xl text-slate-700 whitespace-pre-wrap font-mono shadow-inner min-h-[140px]">
-          {noteValue || "No notes appended for this visit profile."}
+      <div className="flex flex-col h-full gap-4">
+        {patientNoteValue && (
+            <div className="bg-pink-50 p-4 rounded-xl border border-pink-100 shadow-sm">
+                <p className="text-xs font-bold text-pink-700 uppercase mb-1 flex items-center gap-1"><HeartPulse size={14}/> Doctor's Explanation (For You)</p>
+                <div className="text-sm text-pink-950 whitespace-pre-wrap">{patientNoteValue}</div>
+            </div>
+        )}
+        <div className="flex-grow">
+            <p className="text-xs font-bold text-slate-400 uppercase mb-1">Official Physician Note</p>
+            <div className="w-full p-4 border rounded-xl bg-slate-50 text-sm text-slate-700 font-mono min-h-[100px] whitespace-pre-wrap shadow-inner">
+              {noteValue || "No clinical narrative appended for this visit."}
+            </div>
         </div>
       </div>
     );
@@ -108,31 +118,47 @@ const EncounterVoiceNote = ({ targetPatient, visitDate, providerName, noteValue,
         <p className="text-xs font-bold text-slate-500 uppercase">Physician Encounter Note</p>
         {isRecording ? (
           <button onClick={stopRecording} className="px-4 py-1.5 rounded-full text-xs font-bold text-white bg-red-600 hover:bg-red-700 shadow-md flex items-center gap-2 animate-pulse cursor-pointer">
-            <div className="flex items-center gap-0.5 h-3"><span className="w-1 bg-white animate-bounce h-full"></span><span className="w-1 bg-white animate-bounce h-2/3" style={{ animationDelay: '150ms' }}></span><span className="w-1 bg-white animate-bounce h-full" style={{ animationDelay: '300ms' }}></span></div>
+            <div className="flex items-center gap-0.5 h-3"><span className="w-1 bg-white animate-bounce h-full"></span><span className="w-1 bg-white animate-bounce h-2/3"></span></div>
             <span>Listening... Tap to End</span>
           </button>
         ) : (
           <button onClick={startRecording} disabled={isProcessing} className={`px-3 py-1.5 rounded-full text-xs font-bold text-white flex items-center gap-1 shadow-sm ${isProcessing ? "bg-slate-400" : "bg-blue-600 hover:bg-blue-700 cursor-pointer"}`}>
-            {isProcessing ? "🤖 Processing..." : <><Mic size={12}/> Dictate Note</>}
+            {isProcessing ? "🤖 Formatting Note..." : <><Mic size={12}/> Dictate Note</>}
           </button>
         )}
       </div>
-      <textarea value={noteValue} onChange={(e) => setNoteValue(e.target.value)} placeholder="Type clinical notes manually, or dictate to let AI format spoken dictation..." className="w-full flex-grow p-3 border rounded-lg bg-white text-sm focus:ring-2 focus:ring-purple-500 outline-none resize-none min-h-[100px] mb-3"></textarea>
-      <button onClick={onSave} className="w-full bg-purple-600 text-white font-bold py-2 rounded-lg hover:bg-purple-700 transition shadow-sm flex items-center justify-center gap-2"><Save size={16}/> Save Visit Note</button>
+      <textarea value={noteValue} onChange={(e) => setNoteValue(e.target.value)} placeholder="Type clinical notes manually, or dictate..." className="w-full flex-grow p-3 border rounded-lg bg-white text-sm outline-none resize-none min-h-[100px] mb-3"></textarea>
+      
+      {patientNoteValue && (
+          <div className="bg-pink-50 p-3 rounded-lg border border-pink-100">
+              <p className="text-[10px] font-bold text-pink-700 uppercase mb-1 flex items-center gap-1"><HeartPulse size={12}/> AI Generated Patient Note</p>
+              <textarea value={patientNoteValue} onChange={(e) => setPatientNoteValue(e.target.value)} className="w-full p-2 border rounded bg-white text-xs outline-none min-h-[60px] resize-none focus:ring-2 focus:ring-pink-500"></textarea>
+          </div>
+      )}
+
+      <button onClick={onSave} className="w-full bg-purple-600 text-white font-bold py-2 rounded-lg hover:bg-purple-700 transition shadow-sm flex items-center justify-center gap-2 cursor-pointer"><Save size={16}/> Save Visit Note</button>
     </div>
   );
 };
 
 const renderFormattedText = (text) => {
-  if (!text) return "No specific narrative recorded.";
-  return text.split('\n').map((line, idx) => (
-    <div key={idx} className="min-h-[1em]">
-      {line.split(/(\*\*.*?\*\*)/g).map((part, i) => part.startsWith('**') ? <strong key={i} className="text-slate-900">{part.slice(2, -2)}</strong> : <span key={i}>{part}</span>)}
-    </div>
-  ));
+  if (!text) return "No specific metrics detected.";
+  const lines = text.split('\n');
+  return lines.map((line, idx) => {
+    const parts = line.split(/(\*\*.*?\*\*)/g);
+    return (
+      <div key={idx} className="min-h-[1em]">
+        {parts.map((part, i) => {
+          if (part.startsWith('**') && part.endsWith('**')) return <strong key={i} className="text-slate-900">{part.slice(2, -2)}</strong>;
+          return <span key={i}>{part}</span>;
+        })}
+      </div>
+    );
+  });
 };
 
 export default function App() {
+  // --- Accessibility States ---
   const [accDrawerOpen, setAccDrawerOpen] = useState(false);
   const [themeMode, setThemeMode] = useState(() => localStorage.getItem('cliniport_theme') || 'light');
   const [fontSizeMode, setFontSizeMode] = useState(() => localStorage.getItem('cliniport_font') || 'md');
@@ -165,6 +191,11 @@ export default function App() {
   const [pendingRequests, setPendingRequests] = useState([]); const [notifications, setNotifications] = useState([]);
   const prevNotifCount = useRef(0); const prevReqCount = useRef(0);
 
+  // ==========================================================================
+  // 🚨 CRITICAL FIX: null-safe derivation anchored to the VERY top of App()
+  // ==========================================================================
+  const totalUnreadCount = (pendingRequests?.length || 0) + (notifications?.length || 0);
+
   const [isIdUnlocked, setIsIdUnlocked] = useState(false); const [unlockPassword, setUnlockPassword] = useState('');
   const [isUnlocking, setIsUnlocking] = useState(false); const [scanModal, setScanModal] = useState(null); 
   const [selectedScanPatient, setSelectedScanPatient] = useState(''); const [isScanning, setIsScanning] = useState(false); const [isSaving, setIsSaving] = useState(false);
@@ -172,6 +203,7 @@ export default function App() {
   const [vitalsInput, setVitalsInput] = useState({ height: '', weight: '' });
   const [isEditingProfile, setIsEditingProfile] = useState(false); const [profileForm, setProfileForm] = useState({ genetic_conditions: '', chronic_diseases: '', allergies: '', notes: '' });
   const [visitNotes, setVisitNotes] = useState({});
+  const [visitPatientNotes, setVisitPatientNotes] = useState({});
   const [prescriptionInput, setPrescriptionInput] = useState({ medication_name: '', dosage: '', instructions: '' });
   const [orderInput, setOrderInput] = useState({ test_name: '', reason: '' });
 
@@ -198,6 +230,7 @@ export default function App() {
     }
   };
 
+  // --- 💥 MASTER OS HARD RESET FUNCTION ---
   const hardResetApp = async () => {
     if ('serviceWorker' in navigator) { const regs = await navigator.serviceWorker.getRegistrations(); for (let r of regs) await r.unregister(); }
     if ('caches' in window) { const cacheNames = await caches.keys(); for (let c of cacheNames) await caches.delete(c); }
@@ -244,8 +277,9 @@ export default function App() {
   useEffect(() => {
     if (patientData.profile) setProfileForm(patientData.profile);
     if (patientData.visits) {
-      const initialDNotes = {}; Object.values(patientData.visits).forEach(v => { initialDNotes[v.date] = v.doctor_note || ''; });
-      setVisitNotes(initialDNotes); 
+      const initialDNotes = {}; const initialPNotes = {};
+      Object.values(patientData.visits).forEach(v => { initialDNotes[v.date] = v.doctor_note || ''; initialPNotes[v.date] = v.patient_note || ''; });
+      setVisitNotes(initialDNotes); setVisitPatientNotes(initialPNotes);
     }
   }, [patientData]);
 
@@ -356,13 +390,14 @@ export default function App() {
 
   const handleSaveVisitNote = async (date) => {
     try { 
-        await fetch(`${BACKEND_URL}/api/visit/note`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ target_patient: activePatient, visit_date: date, note: visitNotes[date], provider_name: user?.real_name || "Unknown Provider" }) }); 
+        await fetch(`${BACKEND_URL}/api/visit/note`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ target_patient: activePatient, visit_date: date, note: visitNotes[date], patient_note: visitPatientNotes[date], provider_name: user?.real_name || "Unknown Provider" }) }); 
         showToast("Encounter narrative updated.", "success"); fetchPatientData(activePatient); 
     } catch (err) { showToast("Failed to save encounter note.", "error"); }
   };
 
   const handleLogVitals = async (e) => {
     e.preventDefault();
+    if (!vitalsInput.height || !vitalsInput.weight) return showToast("Provide height and weight values.", "error");
     try { await fetch(`${BACKEND_URL}/api/vitals`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ target_patient: activePatient, height_cm: parseFloat(vitalsInput.height), weight_kg: parseFloat(vitalsInput.weight) }) }); setVitalsInput({ height: '', weight: '' }); fetchPatientData(activePatient); showToast("Vitals mapped.", "success"); } catch (err) {}
   };
 
@@ -376,9 +411,87 @@ export default function App() {
     try { await fetch(`${BACKEND_URL}/api/orders`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ target_patient: activePatient, ...orderInput }) }); setOrderInput({ test_name: '', reason: '' }); fetchPatientData(activePatient); showToast("Diagnostic order authorized.", "success"); } catch (err) {}
   };
 
+  const handleSmartScan = async (file) => {
+    const fd = new FormData(); fd.append('file', file);
+    if (user.role === 'Provider') fd.append('provider_uid', user.uid); else fd.append('patient_uid', user.uid);
+    try {
+        const res = await fetch(`${BACKEND_URL}/api/predict-patient`, { method: 'POST', body: fd }); const data = await res.json(); setIsScanning(false);
+        if (data.matched_patients && data.matched_patients.length > 0) { setScanModal({ type: 'file', patients: data.matched_patients, payload: file }); setSelectedScanPatient(data.matched_patients[0]); } else { setScanModal({ type: 'manual_file', payload: file }); setSelectedScanPatient(''); }
+    } catch (err) { setIsScanning(false); setScanModal({ type: 'manual_file', payload: file }); setSelectedScanPatient(''); }
+  };
+
+  const handleTextSmartScan = async (textString) => {
+    const fd = new FormData(); fd.append('text_payload', textString);
+    if (user.role === 'Provider') fd.append('provider_uid', user.uid); else fd.append('patient_uid', user.uid); 
+    try {
+        const res = await fetch(`${BACKEND_URL}/api/predict-patient`, { method: 'POST', body: fd }); const data = await res.json(); setIsScanning(false);
+        if (data.matched_patients && data.matched_patients.length > 0) { setScanModal({ type: 'text', patients: data.matched_patients, payload: textString }); setSelectedScanPatient(data.matched_patients[0]); } else { setScanModal({ type: 'manual_text', payload: textString }); setSelectedScanPatient(''); }
+    } catch (e) { setIsScanning(false); setScanModal({ type: 'manual_text', payload: textString }); setSelectedScanPatient(''); }
+  };
+
+  const confirmScanModal = async () => {
+      if (!scanModal) return; const target = selectedScanPatient;
+      if (!target) return showToast("Select target chart.", "error");
+      setIsSaving(true); 
+      if (scanModal.type === 'text' || scanModal.type === 'manual_text') {
+          try { await fetch(`${BACKEND_URL}/api/visit/note`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ target_patient: target, visit_date: new Date().toISOString().split('T')[0], note: `[Shared Text Message]:\n${scanModal.payload}`, provider_name: user?.real_name || "Unknown Provider" }) }); fetchPatientData(target); showToast("Message bonded to patient notes.", "success"); } catch(e) { }
+      } else if (scanModal.type === 'file' || scanModal.type === 'manual_file') { await processDocumentUpload(scanModal.payload, target); }
+      setIsSaving(false); setScanModal(null);
+  };
+
+  useEffect(() => {
+    if (!user) return; 
+    const urlParams = new URLSearchParams(window.location.search);
+    if (urlParams.get('incoming_share') === 'true') {
+      setIsScanning(true); 
+      (async () => {
+        const cache = await caches.open('shared-files-cache'); const cachedFile = await cache.match('/latest-shared-file'); const cachedText = await cache.match('/latest-shared-text');
+        if (cachedFile) { const blob = await cachedFile.blob(); handleSmartScan(new File([blob], cachedFile.headers.get('X-File-Name') || 'shared_document.pdf', { type: blob.type })); await cache.delete('/latest-shared-file');
+        } else if (cachedText) { handleTextSmartScan(await cachedText.text()); await cache.delete('/latest-shared-text'); 
+        } else { setIsScanning(false); setScanModal({ type: 'error', message: "The share was intercepted, but the payload was empty." }); }
+        window.history.replaceState({}, document.title, "/");
+      })();
+    }
+  }, [user]); 
+
+  const handleFileUpload = async (e) => {
+    const file = e.target.files[0]; if (!file) return;
+    const target = activePatient; if (!target) return showToast("Select a patient chart first.", "error");
+    const proceed = window.confirm(`Upload document for ${target}?`); if (!proceed) { e.target.value = null; return; }
+    setIsSaving(true); await processDocumentUpload(file, target); setIsSaving(false); e.target.value = null; 
+  };
+
+  const handleCategoryClick = (category) => {
+    setActiveCategory(category); 
+    if (patientData.categories[category] && patientData.categories[category].length > 0) { setSelectedTestName(patientData.categories[category][0].test_name); } else { setSelectedTestName(''); }
+  };
+
   return (
     <div className={`min-h-screen font-sans theme-${themeMode} ${getTypographyClass()}`} style={{ filter: colorblindMode === 'none' ? 'none' : `url(#cb-${colorblindMode})` }}>
       
+      {/* 🎨 Master Theme Skins */}
+      <style>{`
+        .theme-light { background-color: #f8fafc; color: #1e293b; }
+        .theme-dark { background-color: #020617 !important; color: #f8fafc !important; }
+        .theme-dark .bg-white, .theme-dark .bg-slate-50, .theme-dark .bg-blue-50, .theme-dark .bg-emerald-50, .theme-dark .bg-pink-50, .theme-dark .bg-cyan-50, .theme-dark .bg-purple-50, .theme-dark .bg-orange-50, .theme-dark .bg-indigo-50 { background-color: #0f172a !important; color: #f8fafc !important; border-color: #1e293b !important; }
+        .theme-dark .text-slate-800, .theme-dark .text-slate-700, .theme-dark .text-slate-600, .theme-dark .text-indigo-900, .theme-dark .text-indigo-950 { color: #f8fafc !important; }
+        
+        .theme-contrast { background-color: #000000 !important; color: #ffff00 !important; font-weight: 900 !important; letter-spacing: 0.05em; }
+        .theme-contrast .bg-white, .theme-contrast .bg-slate-50, .theme-contrast .bg-blue-50, .theme-contrast .bg-emerald-50, .theme-contrast .bg-pink-50, .theme-contrast .bg-cyan-50, .theme-contrast .bg-purple-50, .theme-contrast .bg-orange-50, .theme-contrast .bg-indigo-50 { background-color: #000000 !important; color: #ffff00 !important; border-color: #ffff00 !important; border-width: 3px !important; box-shadow: none !important; }
+        .theme-contrast .text-slate-800, .theme-contrast .text-slate-700, .theme-contrast .text-indigo-900, .theme-contrast .text-indigo-950, .theme-contrast .text-blue-600, .theme-contrast .text-emerald-700, .theme-contrast .text-pink-700 { color: #ffff00 !important; font-weight: 900 !important; }
+
+        @keyframes dropIn { 0% { transform: translateY(-100vh) scaleY(1.5); opacity: 0; } 60% { opacity: 1; } 100% { transform: translateY(0) scale(1); opacity: 1; } } 
+        @keyframes splashOut { 0% { transform: scale(0); opacity: 0.8; } 100% { transform: scale(25); opacity: 0; display: none; } } 
+        .liquid-drop { animation: dropIn 0.6s cubic-bezier(0.25, 1, 0.5, 1) forwards; } 
+        .liquid-ripple-1 { animation: splashOut 1.2s cubic-bezier(0.1, 0.8, 0.3, 1) forwards; animation-delay: 0.5s; } 
+        .liquid-ripple-2 { animation: splashOut 1.2s cubic-bezier(0.1, 0.8, 0.3, 1) forwards; animation-delay: 0.65s; }
+        @keyframes ecgWipe { 0% { clip-path: inset(0 100% 0 0); } 50% { clip-path: inset(0 0 0 0); } 100% { clip-path: inset(0 0 0 100%); } }
+        .animate-ecg { animation: ecgWipe 1.5s cubic-bezier(0.4, 0, 0.2, 1) infinite; }
+      `}</style>
+
+      {/* 👁️ Daltonization Matrices */}
+      <svg className="hidden"><defs><filter id="cb-protanopia"><feColorMatrix type="matrix" values="0.56667 0.43333 0 0 0  0.55833 0.44167 0 0 0  0 0.24167 0.75833 0 0  0 0 0 1 0" /></filter><filter id="cb-deuteranopia"><feColorMatrix type="matrix" values="0.625 0.375 0 0 0  0.7 0.3 0 0 0  0 0.3 0.7 0 0  0 0 0 1 0" /></filter><filter id="cb-tritanopia"><feColorMatrix type="matrix" values="0.95 0.05 0 0 0  0 0.43333 0.56667 0 0  0 0.475 0.525 0 0  0 0 0 1 0" /></filter></defs></svg>
+
       {/* Floating Inline Toast Bar */}
       <ToastBar toast={toast} onClose={() => setToast(null)} />
       
@@ -432,7 +545,10 @@ export default function App() {
               <span className="text-xs font-mono font-bold bg-slate-100 text-slate-600 px-3 py-1 rounded-full hidden sm:block">ID: {isIdUnlocked ? user.uid : '••••••••'}</span>
               <button onClick={() => setAccDrawerOpen(true)} className="p-2 rounded-lg bg-slate-100 text-slate-600 hover:bg-blue-600 hover:text-white transition-all cursor-pointer flex items-center gap-1 font-bold text-xs"><Settings size={16} /> <span className="hidden md:inline">Accessibility Suite</span></button>
               <span className="text-xs md:text-sm font-medium bg-slate-100 px-3 py-1 rounded-full">{user.real_name}</span>
+              
+              {/* --- 1. HARD RESET BUTTON (In header navigation) --- */}
               <button onClick={hardResetApp} className="text-xs md:text-sm text-slate-400 hover:text-orange-500 font-bold ml-2 border-l border-slate-200 pl-3 cursor-pointer flex items-center gap-1"><RefreshCw size={14}/> Reset App</button>
+
               <button onClick={() => { localStorage.removeItem('cliniport_user'); setUser(null); setView('login'); showToast("Securely signed out.", "info"); }} className="text-sm text-slate-500 hover:text-red-500 font-medium cursor-pointer ml-2">Log Out</button>
             </div>
           </nav>
@@ -531,9 +647,7 @@ export default function App() {
                   )}
 
                   {dashTab === 'visits' && (
-                      <div className="space-y-6 animate-in fade-in duration-300"><div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100"><h3 className="text-xl font-bold mb-2 text-slate-800 flex items-center gap-2"><Stethoscope className="text-purple-600"/> Clinical Encounters</h3></div>{patientData.visits && Object.keys(patientData.visits).length > 0 ? (Object.values(patientData.visits).sort((a, b) => new Date(b.date) - new Date(a.date)).map((visit, idx) => (<div key={idx} className="bg-white p-4 md:p-6 rounded-2xl shadow-sm border border-slate-100 hover:shadow-md transition-shadow"><div className="flex justify-between items-center border-b pb-4 mb-4"><div><h4 className="font-bold text-lg text-slate-800">Encounter: {visit.date}</h4><p className="text-sm text-slate-500">Provider: {visit.provider}</p></div></div><div className="grid grid-cols-1 lg:grid-cols-2 gap-6"><div className="space-y-4"><div className="bg-emerald-50 p-4 rounded-xl border border-emerald-100 shadow-sm"><p className="text-xs font-bold text-emerald-700 uppercase mb-1">AI Visit Summary</p><div className="text-sm text-emerald-900 whitespace-pre-wrap">{renderFormattedText(visit.ai_summary)}</div></div>{visit.patient_note && (<div className="bg-pink-50 p-4 rounded-xl border border-pink-100 shadow-sm"><p className="text-xs font-bold text-pink-700 uppercase mb-1 flex items-center gap-1"><HeartPulse size={14}/> Patient Explanation</p><div className="text-sm text-pink-900 whitespace-pre-wrap">{renderFormattedText(visit.patient_note)}</div></div>)}{visit.ai_terminology && Object.keys(visit.ai_terminology).length > 0 && (<div className="bg-blue-50 p-4 rounded-xl border border-blue-100 shadow-sm"><p className="text-xs font-bold text-blue-700 uppercase mb-2 flex items-center gap-1"><BookOpen size={14}/> Terminology Guide</p><ul className="space-y-2">{Object.entries(visit.ai_terminology).map(([term, definition], i) => (
-                                                      <li key={i} className="text-sm text-blue-900 bg-white p-2 rounded border border-blue-50"><strong>{term}:</strong> {definition}</li>
-                                                    ))}</ul></div>)}<div><p className="text-xs font-bold text-slate-500 uppercase mb-2">Attached Documents</p><ul className="space-y-2">{visit.documents.map((doc, i) => (<li key={i} className="flex items-center gap-2 text-sm text-slate-700 bg-slate-50 p-2 rounded border break-all"><FileText size={14} className="text-slate-400 shrink-0"/> {doc}</li>))}</ul></div></div><EncounterVoiceNote targetPatient={activePatient} visitDate={visit.date} providerName={user.real_name} noteValue={visitNotes[visit.date] || ''} setNoteValue={(val) => setVisitNotes({...visitNotes, [visit.date]: val})} onSave={() => handleSaveVisitNote(visit.date)} isPatient={user.role === 'Patient'} showToast={showToast}/></div></div>))) : (<div className="bg-white p-12 text-center rounded-2xl border border-slate-100 border-dashed"><p className="text-slate-500">No recorded encounters.</p></div>)}</div>
+                      <div className="space-y-6 animate-in fade-in duration-300"><div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100"><h3 className="text-xl font-bold mb-2 text-slate-800 flex items-center gap-2"><Stethoscope className="text-purple-600"/> Clinical Encounters</h3></div>{patientData.visits && Object.keys(patientData.visits).length > 0 ? (Object.values(patientData.visits).sort((a, b) => new Date(b.date) - new Date(a.date)).map((visit, idx) => (<div key={idx} className="bg-white p-4 md:p-6 rounded-2xl shadow-sm border border-slate-100 hover:shadow-md transition-shadow"><div className="flex justify-between items-center border-b pb-4 mb-4"><div><h4 className="font-bold text-lg text-slate-800">Encounter: {visit.date}</h4><p className="text-sm text-slate-500">Provider: {visit.provider}</p></div></div><div className="grid grid-cols-1 lg:grid-cols-2 gap-6"><div className="space-y-4"><div className="bg-emerald-50 p-4 rounded-xl border border-emerald-100 shadow-sm"><p className="text-xs font-bold text-emerald-700 uppercase mb-1">AI Visit Summary</p><div className="text-sm text-emerald-900 whitespace-pre-wrap">{renderFormattedText(visit.ai_summary)}</div></div>{visit.patient_note && (<div className="bg-pink-50 p-4 rounded-xl border border-pink-100 shadow-sm"><p className="text-xs font-bold text-pink-700 uppercase mb-1 flex items-center gap-1"><HeartPulse size={14}/> Patient Explanation</p><div className="text-sm text-pink-900 whitespace-pre-wrap">{renderFormattedText(visit.patient_note)}</div></div>)}{visit.ai_terminology && Object.keys(visit.ai_terminology).length > 0 && (<div className="bg-blue-50 p-4 rounded-xl border border-blue-100 shadow-sm"><p className="text-xs font-bold text-blue-700 uppercase mb-2 flex items-center gap-1"><BookOpen size={14}/> Terminology Guide</p><ul className="space-y-2">{Object.entries(visit.ai_terminology).map(([term, definition], i) => (<li key={i} className="text-sm text-blue-900 bg-white p-2 rounded border border-blue-50"><strong>{term}:</strong> {definition}</li>))}</ul></div>)}<div><p className="text-xs font-bold text-slate-500 uppercase mb-2">Attached Documents</p><ul className="space-y-2">{visit.documents.map((doc, i) => (<li key={i} className="flex items-center gap-2 text-sm text-slate-700 bg-slate-50 p-2 rounded border break-all"><FileText size={14} className="text-slate-400 shrink-0"/> {doc}</li>))}</ul></div></div><EncounterVoiceNote targetPatient={activePatient} visitDate={visit.date} providerName={user.real_name} noteValue={visitNotes[visit.date] || ''} setNoteValue={(val) => setVisitNotes({...visitNotes, [visit.date]: val})} onSave={() => handleSaveVisitNote(visit.date)} isPatient={user.role === 'Patient'} showToast={showToast}/></div></div>))) : (<div className="bg-white p-12 text-center rounded-2xl border border-slate-100 border-dashed"><p className="text-slate-500">No recorded encounters.</p></div>)}</div>
                   )}
 
                   {dashTab === 'prescriptions' && (
@@ -561,16 +675,12 @@ export default function App() {
                   )}
                 </div>
               )}
-
-              {view === 'upload' && activePatient && (
-                <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500"><div className="bg-white p-12 rounded-2xl border text-center"><div className="w-20 h-20 bg-blue-50 rounded-full flex items-center justify-center mx-auto mb-6"><Upload size={32} className="text-blue-600" /></div><h3 className="text-xl font-bold mb-2">Upload to Chart</h3><p className="text-slate-500 mb-4">{activePatient}</p><label className="cursor-pointer bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-6 rounded-xl inline-block mt-2 shadow-md"><span>Browse File</span><input type="file" onChange={handleFileUpload} className="hidden" /></label></div></div>
-              )}
             </div>
           </div>
         </div>
       )}
 
-      {/* --- ⚙️ MASTER ACCESSIBILITY OS SUITE DRAWER --- */}
+      {/* --- 2. THE FLOATING ACCESSIBILITY OS GEAR SUITE --- */}
       {accDrawerOpen && (
         <div className="fixed inset-0 z-[9999999] bg-slate-900/70 backdrop-blur-xs flex justify-end animate-in fade-in duration-200">
           <div className="w-full max-w-md bg-white h-full shadow-2xl p-6 overflow-y-auto flex flex-col justify-between animate-in slide-in-from-right duration-300">
@@ -618,7 +728,7 @@ export default function App() {
                   </div>
                 </div>
 
-                {/* --- 💥 THE MASTER HARD RESET BUTTON --- */}
+                {/* --- 💥 THE MASTER ACCESSIBILITY HARD RESET BUTTON --- */}
                 <div className="pt-4 border-t border-slate-200">
                   <button onClick={hardResetApp} className="w-full bg-orange-600 hover:bg-orange-700 text-white font-black py-4 rounded-xl shadow-lg flex items-center justify-center gap-2 cursor-pointer transition-all active:scale-[0.98]">
                     <RefreshCw size={18} /> <span>💥 Full System Hard Reset</span>

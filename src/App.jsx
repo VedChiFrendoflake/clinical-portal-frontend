@@ -92,7 +92,7 @@ const EncounterVoiceNote = ({ targetPatient, visitDate, providerName, noteValue,
     } catch (err) { showToast("Upload failed. Network dropped.", "error"); } finally { setIsProcessing(false); }
   };
 
-  // 🛡️ PATIENT GATEKEEPER: Totally strips dictation controls for patients
+  // 🛡️ PATIENT GATEKEEPER: Totally strips dictation controls & edit access for patients
   if (isPatient) {
     return (
       <div className="flex flex-col h-full gap-4">
@@ -158,7 +158,7 @@ const renderFormattedText = (text) => {
 };
 
 export default function App() {
-  // --- Accessibility States ---
+  // --- States ---
   const [accDrawerOpen, setAccDrawerOpen] = useState(false);
   const [themeMode, setThemeMode] = useState(() => localStorage.getItem('cliniport_theme') || 'light');
   const [fontSizeMode, setFontSizeMode] = useState(() => localStorage.getItem('cliniport_font') || 'md');
@@ -189,7 +189,6 @@ export default function App() {
   const [familyMembers, setFamilyMembers] = useState([]); const [newFamilyMember, setNewFamilyMember] = useState({ name: '', age: '', gender: 'Male', username: '', password: '' });
 
   const [pendingRequests, setPendingRequests] = useState([]); const [notifications, setNotifications] = useState([]);
-  const prevNotifCount = useRef(0); const prevReqCount = useRef(0);
 
   // ==========================================================================
   // 🚨 CRITICAL FIX: null-safe derivation anchored to the VERY top of App()
@@ -454,11 +453,13 @@ export default function App() {
     }
   }, [user]); 
 
+  // --- 📂 FILE UPLOAD SUBMISSION HANDLER ---
   const handleFileUpload = async (e) => {
     const file = e.target.files[0]; if (!file) return;
     const target = activePatient; if (!target) return showToast("Select a patient chart first.", "error");
-    const proceed = window.confirm(`Upload document for ${target}?`); if (!proceed) { e.target.value = null; return; }
-    setIsSaving(true); await processDocumentUpload(file, target); setIsSaving(false); e.target.value = null; 
+    const proceed = window.confirm(`Upload diagnostic document for ${target}?`); if (!proceed) { e.target.value = null; return; }
+    setIsSaving(true); await processDocumentUpload(file, target); setIsSaving(false); e.target.value = null;
+    setView('dashboard'); // Instantly refreshes back to chart view
   };
 
   const handleCategoryClick = (category) => {
@@ -545,10 +546,7 @@ export default function App() {
               <span className="text-xs font-mono font-bold bg-slate-100 text-slate-600 px-3 py-1 rounded-full hidden sm:block">ID: {isIdUnlocked ? user.uid : '••••••••'}</span>
               <button onClick={() => setAccDrawerOpen(true)} className="p-2 rounded-lg bg-slate-100 text-slate-600 hover:bg-blue-600 hover:text-white transition-all cursor-pointer flex items-center gap-1 font-bold text-xs"><Settings size={16} /> <span className="hidden md:inline">Accessibility Suite</span></button>
               <span className="text-xs md:text-sm font-medium bg-slate-100 px-3 py-1 rounded-full">{user.real_name}</span>
-              
-              {/* --- 1. HARD RESET BUTTON (In header navigation) --- */}
               <button onClick={hardResetApp} className="text-xs md:text-sm text-slate-400 hover:text-orange-500 font-bold ml-2 border-l border-slate-200 pl-3 cursor-pointer flex items-center gap-1"><RefreshCw size={14}/> Reset App</button>
-
               <button onClick={() => { localStorage.removeItem('cliniport_user'); setUser(null); setView('login'); showToast("Securely signed out.", "info"); }} className="text-sm text-slate-500 hover:text-red-500 font-medium cursor-pointer ml-2">Log Out</button>
             </div>
           </nav>
@@ -567,7 +565,15 @@ export default function App() {
               <ul className="space-y-2">
                 {user.role === 'Provider' && (<><li><button onClick={() => {fetchRoster(user.uid); setView('provider_roster');}} className={`w-full text-left p-3 rounded-xl flex items-center gap-2 cursor-pointer ${view === 'provider_roster' ? 'bg-blue-50 text-blue-700 font-bold' : 'hover:bg-slate-50'}`}><Users size={18}/> My Roster</button></li><li><button onClick={() => setView('provider_search')} className={`w-full text-left p-3 rounded-xl flex items-center gap-2 cursor-pointer ${view === 'provider_search' ? 'bg-blue-50 text-blue-700 font-bold' : 'hover:bg-slate-50'}`}><Search size={18}/> Search</button></li></>)}
                 {user.role === 'Patient' && (<li><button onClick={() => setView('patient_inbox')} className={`w-full text-left p-3 rounded-xl flex justify-between cursor-pointer ${view === 'patient_inbox' ? 'bg-emerald-50 text-emerald-700 font-bold' : 'hover:bg-slate-50'}`}><span className="flex items-center gap-2"><Bell size={18}/> Inbox</span>{totalUnreadCount > 0 && <span className="bg-red-500 text-white text-xs px-2 py-0.5 rounded-full">{totalUnreadCount}</span>}</button></li>)}
-                {activePatient && (<li><button onClick={() => setView('upload')} className={`w-full text-left p-3 rounded-xl flex items-center gap-2 cursor-pointer ${view === 'upload' ? 'bg-blue-50 text-blue-700 font-bold' : 'hover:bg-slate-50'}`}><Upload size={18}/> Upload Document</button></li>)}
+                
+                {/* --- 📂 LEFT SIDEBAR BUTTON FOR UPLOADS --- */}
+                {activePatient && (
+                  <li>
+                    <button onClick={() => setView('upload')} className={`w-full text-left p-3 rounded-xl flex items-center gap-2 cursor-pointer ${view === 'upload' ? 'bg-blue-50 text-blue-700 font-bold' : 'hover:bg-slate-50'}`}>
+                      <Upload size={18}/> Upload Document
+                    </button>
+                  </li>
+                )}
               </ul>
             </div>
 
@@ -651,7 +657,7 @@ export default function App() {
                   )}
 
                   {dashTab === 'prescriptions' && (
-                     <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 animate-in fade-in duration-300"><div className="lg:col-span-2 bg-white rounded-2xl border h-fit"><div className="bg-slate-50 px-6 py-4 border-b flex justify-between items-center"><h3 className="font-bold text-lg flex items-center gap-2"><Pill className="text-cyan-600"/> Active Medications</h3></div><div className="p-6">{patientData.prescriptions && patientData.prescriptions.length > 0 ? (<ul className="space-y-4">{patientData.prescriptions.map((rx, idx) => (<li key={idx} className="p-4 border rounded-xl bg-cyan-50 border-cyan-100 hover:shadow-md"><div className="flex justify-between mb-2"><h4 className="font-bold text-cyan-900 text-lg">{rx.medication}</h4><span className="text-xs font-bold text-cyan-600 bg-white px-2 py-1 rounded border">Ordered: {rx.date}</span></div><p className="text-sm font-semibold text-cyan-800 mb-1">Dosage: {rx.dosage}</p><p className="text-sm text-cyan-700 italic">"{rx.instructions}"</p></li>))}</ul>) : (<p className="text-slate-500 text-center py-10">No active prescriptions.</p>)}</div></div>{user.role === 'Provider' && (<div className="lg:col-span-1"><div className="bg-white p-6 rounded-2xl border"><h3 className="font-bold mb-4 flex items-center gap-2"><Edit3 className="text-cyan-600" size={20}/> New Prescription</h3><form onSubmit={handleAddPrescription} className="space-y-4"><div><input type="text" placeholder="Medication Name" required value={prescriptionInput.medication_name} onChange={e => setSpreadscriptionInput({...prescriptionInput, medication_name: e.target.value})} className="w-full p-2 border rounded bg-slate-50 focus:ring-2 outline-none" /></div><div><input type="text" placeholder="Dosage" required value={prescriptionInput.dosage} onChange={e => setPrescriptionInput({...prescriptionInput, dosage: e.target.value})} className="w-full p-2 border rounded bg-slate-50 focus:ring-2 outline-none" /></div><div><textarea placeholder="Instructions (Sig)" required value={prescriptionInput.instructions} onChange={e => setPrescriptionInput({...prescriptionInput, instructions: e.target.value})} className="w-full p-2 border rounded bg-slate-50 h-24 focus:ring-2 outline-none"></textarea></div><button type="submit" className="w-full bg-cyan-600 text-white font-bold py-2 rounded cursor-pointer">Prescribe</button></form></div></div>)}</div>
+                     <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 animate-in fade-in duration-300"><div className="lg:col-span-2 bg-white rounded-2xl border h-fit"><div className="bg-slate-50 px-6 py-4 border-b flex justify-between items-center"><h3 className="font-bold text-lg flex items-center gap-2"><Pill className="text-cyan-600"/> Active Medications</h3></div><div className="p-6">{patientData.prescriptions && patientData.prescriptions.length > 0 ? (<ul className="space-y-4">{patientData.prescriptions.map((rx, idx) => (<li key={idx} className="p-4 border rounded-xl bg-cyan-50 border-cyan-100 hover:shadow-md"><div className="flex justify-between mb-2"><h4 className="font-bold text-cyan-900 text-lg">{rx.medication}</h4><span className="text-xs font-bold text-cyan-600 bg-white px-2 py-1 rounded border">Ordered: {rx.date}</span></div><p className="text-sm font-semibold text-cyan-800 mb-1">Dosage: {rx.dosage}</p><p className="text-sm text-cyan-700 italic">"{rx.instructions}"</p></li>))}</ul>) : (<p className="text-slate-500 text-center py-10">No active prescriptions.</p>)}</div></div>{user.role === 'Provider' && (<div className="lg:col-span-1"><div className="bg-white p-6 rounded-2xl border"><h3 className="font-bold mb-4 flex items-center gap-2"><Edit3 className="text-cyan-600" size={20}/> New Prescription</h3><form onSubmit={handleAddPrescription} className="space-y-4"><div><input type="text" placeholder="Medication Name" required value={prescriptionInput.medication_name} onChange={e => setPrescriptionInput({...prescriptionInput, medication_name: e.target.value})} className="w-full p-2 border rounded bg-slate-50 focus:ring-2 outline-none" /></div><div><input type="text" placeholder="Dosage" required value={prescriptionInput.dosage} onChange={e => setPrescriptionInput({...prescriptionInput, dosage: e.target.value})} className="w-full p-2 border rounded bg-slate-50 focus:ring-2 outline-none" /></div><div><textarea placeholder="Instructions (Sig)" required value={prescriptionInput.instructions} onChange={e => setPrescriptionInput({...prescriptionInput, instructions: e.target.value})} className="w-full p-2 border rounded bg-slate-50 h-24 focus:ring-2 outline-none"></textarea></div><button type="submit" className="w-full bg-cyan-600 text-white font-bold py-2 rounded cursor-pointer">Prescribe</button></form></div></div>)}</div>
                   )}
 
                   {dashTab === 'orders' && (
@@ -673,6 +679,25 @@ export default function App() {
                   {dashTab === 'diseases' && (
                      <div className="bg-white p-8 rounded-2xl border overflow-x-auto animate-in fade-in duration-300"><h3 className="text-xl font-bold mb-6 flex items-center gap-2"><Bug className="text-rose-600"/> Screenings</h3>{patientData.diseases && patientData.diseases.length > 0 ? (<table className="w-full text-left min-w-[400px]"><thead className="bg-slate-50 border-b"><tr><th className="p-4">Condition</th><th className="p-4">Date Tested</th><th className="p-4">Result</th></tr></thead><tbody>{patientData.diseases.map((dis, idx) => (<tr key={idx} className="border-b hover:bg-slate-50"><td className="p-4 font-semibold">{dis.name}</td><td className="p-4 text-slate-600">{dis.date_tested}</td><td className="p-4"><span className="font-bold px-3 py-1 rounded-full text-sm bg-white border">{dis.result}</span></td></tr>))}</tbody></table>) : (<p className="text-slate-500 py-10 text-center">No records found.</p>)}</div>
                   )}
+                </div>
+              )}
+
+              {/* 📂 RESTORED UPLOAD VIEW */}
+              {view === 'upload' && activePatient && (
+                <div className="bg-white p-8 md:p-12 rounded-2xl shadow-sm border border-slate-100 text-center animate-in fade-in slide-in-from-bottom-4 duration-500">
+                  <div className="w-20 h-20 bg-blue-50 text-blue-600 rounded-full flex items-center justify-center mx-auto mb-6 shadow-inner">
+                    <Upload size={36} />
+                  </div>
+                  <h3 className="text-2xl font-black text-slate-800 mb-2">Upload Diagnostic Document</h3>
+                  <p className="text-slate-500 text-sm mb-6 max-w-md mx-auto">
+                    Select a standardized lab report, external clinical notes, or medical imaging release for <strong className="text-blue-600 font-bold">{activePatient}</strong>.
+                  </p>
+                  <label className="cursor-pointer bg-blue-600 hover:bg-blue-700 text-white font-bold py-3.5 px-8 rounded-xl inline-flex items-center gap-2 shadow-md transition-all active:scale-[0.98]">
+                    <Upload size={18} />
+                    <span>Select File to Parse</span>
+                    <input type="file" onChange={handleFileUpload} className="hidden" />
+                  </label>
+                  <p className="text-[11px] text-slate-400 font-mono mt-6">Supports PDF, PNG, JPG, and raw clinical document scans.</p>
                 </div>
               )}
             </div>
